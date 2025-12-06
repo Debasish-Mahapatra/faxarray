@@ -274,3 +274,115 @@ def open_mfdataset(
         print(f"Done! Combined shape: {dict(combined.sizes)}")
     
     return combined
+
+
+def open_tar(
+    tarpath: str,
+    pattern: str = '*',
+    temp_dir: str = None,
+    cleanup: bool = True,
+    concat_dim: str = 'time',
+    progress: bool = False,
+    **kwargs
+) -> xr.Dataset:
+    """
+    Open FA files from a tar archive.
+    
+    Extracts files to a temporary directory, reads them, and optionally
+    cleans up the extracted files after reading.
+    
+    Parameters
+    ----------
+    tarpath : str
+        Path to the tar archive (.tar, .tar.gz, .tgz)
+    pattern : str, default '*'
+        Glob pattern to filter files within the archive (e.g., '*+000*')
+    temp_dir : str, optional
+        Directory to extract files to. If None, uses system temp.
+        If specified, files are extracted there (useful for caching).
+    cleanup : bool, default True
+        If True, delete extracted files after reading.
+        Set to False to keep extracted files for reuse.
+    concat_dim : str, default 'time'
+        Dimension to concatenate along
+    progress : bool, default False
+        Print progress messages
+    **kwargs
+        Additional arguments passed to open_dataset
+        
+    Returns
+    -------
+    xarray.Dataset
+        Combined dataset with all matching files from the archive
+        
+    Example
+    -------
+    >>> ds = fx.open_tar('pf20130101.tar.gz')  # All files
+    >>> ds = fx.open_tar('pf20130101.tar.gz', pattern='*+00*')  # Hours 0-9
+    >>> ds = fx.open_tar('pf20130101.tar.gz', temp_dir='/scratch/temp', cleanup=False)
+    """
+    import tarfile
+    import tempfile
+    import shutil
+    import fnmatch
+    import os
+    
+    if progress:
+        print(f"Opening tar archive: {tarpath}")
+    
+    # Determine extraction directory
+    if temp_dir is None:
+        extract_dir = tempfile.mkdtemp(prefix='faxarray_')
+        created_temp = True
+    else:
+        extract_dir = temp_dir
+        os.makedirs(extract_dir, exist_ok=True)
+        created_temp = False
+    
+    try:
+        # Open tar and filter members
+        with tarfile.open(tarpath, 'r:*') as tar:
+            all_members = tar.getmembers()
+            # Filter by pattern (only files, not directories)
+            members = [m for m in all_members 
+                      if m.isfile() and fnmatch.fnmatch(m.name, pattern)]
+            
+            if not members:
+                raise FileNotFoundError(
+                    f"No files matching pattern '{pattern}' in {tarpath}"
+                )
+            
+            if progress:
+                print(f"  Extracting {len(members)} files to {extract_dir}...")
+            
+            # Extract matching files
+            tar.extractall(extract_dir, members=members)
+        
+        # Get list of extracted files
+        extracted_files = sorted([
+            os.path.join(extract_dir, m.name) for m in members
+        ])
+        
+        if progress:
+            print(f"  Reading {len(extracted_files)} FA files...")
+        
+        # Read using open_mfdataset
+        ds = open_mfdataset(
+            extracted_files, 
+            concat_dim=concat_dim,
+            progress=progress,
+            **kwargs
+        )
+        
+        # Force load data into memory if cleanup is needed
+        if cleanup and created_temp:
+            ds = ds.load()
+        
+        return ds
+        
+    finally:
+        # Cleanup if requested and we created the temp dir
+        if cleanup and created_temp:
+            if progress:
+                print(f"  Cleaning up temp files...")
+            shutil.rmtree(extract_dir, ignore_errors=True)
