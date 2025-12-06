@@ -165,6 +165,43 @@ class FAReader:
                 self._field_info[name] = FAFieldInfo(name=name)
         return self._field_info[name]
     
+    def get_validity(self) -> dict:
+        """
+        Extract time validity info from the FA file.
+        
+        Returns
+        -------
+        dict with keys:
+            - valid_time: datetime, the valid/forecast time
+            - base_time: datetime, the initialization/reference time
+            - lead_time: timedelta, the forecast lead time
+        """
+        import numpy as np
+        
+        # Read any field to get validity info
+        for fname in self.fields[:10]:
+            try:
+                field = self._resource.readfield(fname)
+                if hasattr(field, 'validity'):
+                    valid_time = field.validity.get()
+                    base_time = field.validity.getbasis()
+                    lead_time = field.validity.term()
+                    
+                    return {
+                        'valid_time': np.datetime64(valid_time),
+                        'base_time': np.datetime64(base_time),
+                        'lead_time': np.timedelta64(lead_time),
+                    }
+            except:
+                continue
+        
+        # Fallback: no validity info available
+        return {
+            'valid_time': None,
+            'base_time': None,
+            'lead_time': None,
+        }
+    
     def read_field(self, name: str, convert_spectral: bool = True) -> np.ndarray:
         """
         Read a single field from the file.

@@ -600,7 +600,13 @@ class FADataset:
         for dim_name, coord_info in level_coords.items():
             coords[dim_name] = coord_info['values']
         
-        # Create dataset
+        # Get time validity info
+        validity = self._reader.get_validity()
+        valid_time = validity['valid_time']
+        base_time = validity['base_time']
+        lead_time = validity['lead_time']
+        
+        # Create dataset (without time dim yet)
         ds = xr.Dataset(
             data_vars,
             coords=coords,
@@ -614,6 +620,26 @@ class FADataset:
         for dim_name, coord_info in level_coords.items():
             if dim_name in ds.coords:
                 ds[dim_name].attrs = coord_info['attrs']
+        
+        # Add time dimension to all variables
+        if valid_time is not None:
+            # Expand all data variables to include time dimension at axis 0
+            ds = ds.expand_dims(dim={'time': 1}, axis=0)
+            
+            # Assign the actual time coordinate value
+            ds = ds.assign_coords(time=[valid_time])
+            
+            # Add time coordinate attributes
+            ds['time'].attrs = {
+                'long_name': 'valid time',
+                'standard_name': 'time',
+            }
+            
+            # Store base_time and lead_time as attributes
+            if base_time is not None:
+                ds.attrs['base_time'] = str(base_time)
+            if lead_time is not None:
+                ds.attrs['lead_time'] = str(lead_time)
         
         return ds
     
