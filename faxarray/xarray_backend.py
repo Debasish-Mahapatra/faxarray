@@ -440,9 +440,29 @@ def open_tar(
         if progress:
             print(f"  Concatenating along '{concat_dim}' dimension...")
         
+        # Verify consistency of variables across files
+        # The user wants to be notified if variables are missing
+        first_vars = set(datasets[0].data_vars)
+        for i, ds in enumerate(datasets[1:]):
+            current_vars = set(ds.data_vars)
+            if current_vars != first_vars:
+                missing = first_vars - current_vars
+                extra = current_vars - first_vars
+                msg = f"Inconsistent variables in file {i+2}."
+                if missing: msg += f" Missing: {missing}."
+                if extra: msg += f" Extra: {extra}."
+                print(f"WARNING: {msg}")
+                # We could raise an error here if strictness is required
+                
         # Concatenate along the specified dimension
-        # join='outer' handles variables with different level counts (e.g. 86 vs 87)
-        combined = xr.concat(datasets, dim=concat_dim, join='outer')
+        # join='exact' ensures we are notified if coordinates (like levels) mismatch
+        # This prevents silent creation of NaN-filled sparse arrays due to precision issues
+        try:
+            combined = xr.concat(datasets, dim=concat_dim, join='exact')
+        except ValueError as e:
+            print("ERROR: Coordinate mismatch during concatenation!")
+            print("Use join='outer' or 'override' if this is due to floating-point precision noise.")
+            raise e
         
         if progress:
             print(f"  Combined shape: {dict(combined.sizes)}")
