@@ -626,13 +626,23 @@ class FADataset:
             # Expand all data variables to include time dimension at axis 0
             ds = ds.expand_dims(dim={'time': 1}, axis=0)
             
-            # Assign the actual time coordinate value
-            ds = ds.assign_coords(time=[valid_time])
+            # Assign the actual time coordinate value  
+            # Use pandas Timestamp for proper CF encoding
+            import pandas as pd
+            time_value = pd.Timestamp(str(valid_time))
+            ds = ds.assign_coords(time=[time_value])
             
-            # Add time coordinate attributes
+            # Add CF-compliant time coordinate attributes for ncview compatibility
             ds['time'].attrs = {
                 'long_name': 'valid time',
                 'standard_name': 'time',
+            }
+            
+            # Encode time for NetCDF (ncview needs this)
+            ds['time'].encoding = {
+                'units': 'hours since 1970-01-01',
+                'calendar': 'proleptic_gregorian',
+                'dtype': 'float64',
             }
             
             # Store base_time and lead_time as attributes
