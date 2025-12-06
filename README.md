@@ -13,15 +13,21 @@ A Python package that wraps EPyGrAM with a clean, xarray-like API. Provides easy
 
 ## Installation
 
-```bash
-# From source
-pip install -e .
+**Important:** This package requires **Python 3.11**.
+This is because `epygram` depends on binary packages (`ectrans4py`, `falfilfa4py`) which are currently only available for specific python versions (3.12 is not yet fully supported).
 
-# With cartopy for geographic projections
-pip install -e ".[plotting]"
+We recommend using `conda` to manage the environment:
+
+```bash
+# Create a new environment with Python 3.11
+conda create -n faxarray_env python=3.11
+conda activate faxarray_env
+
+# Install faxarray
+pip install git+https://github.com/Debasish-Mahapatra/faxarray
 ```
 
-**Note:** Requires [EPyGrAM](https://github.com/UMR-CNRM/EPyGrAM) to be installed for FA file reading.
+**Note:** The installation will automatically pull `epygram` (v2.0.7), `h5py`, and `cartopy`.
 
 ## Quick Start
 
@@ -127,13 +133,14 @@ A single variable from an FA file.
 
 ## Requirements
 
-- Python >= 3.9
+- Python 3.11 (strictly required for `epygram` binary dependencies)
 - numpy
 - xarray
 - netCDF4
 - matplotlib
-- [epygram](https://github.com/UMR-CNRM/EPyGrAM) (for FA file reading)
-- cartopy (optional, for geographic projections)
+- [epygram](https://github.com/UMR-CNRM/EPyGrAM) (v2.0.7+, automatically installed)
+- h5py
+- cartopy
 
 ## License
 
