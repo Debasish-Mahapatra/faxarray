@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "faxarray"
+version = "0.1.0"
+description = "Fast, user-friendly interface for Météo-France FA files with xarray-like API"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+keywords = ["meteorology", "FA", "netCDF", "xarray", "ARPEGE", "AROME", "Météo-France"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "numpy>=1.20",
+    "xarray>=2022.0",
+    "netCDF4>=1.5",
+    "matplotlib>=3.5",
+]
+
+[project.optional-dependencies]
+plotting = ["cartopy>=0.20"]
+all = ["cartopy>=0.20"]
+dev = ["pytest>=7.0", "pytest-cov"]
+
+[project.scripts]
+faxarray = "faxarray.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/faxarray"
+Documentation = "https://github.com/yourusername/faxarray#readme"
+Repository = "https://github.com/yourusername/faxarray"
+
+# Register as xarray backend engine
+[project.entry-points."xarray.backends"]
+faxarray = "faxarray.xarray_backend:FABackendEntrypoint"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["faxarray*"]
