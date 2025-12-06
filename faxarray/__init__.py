@@ -30,7 +30,7 @@ from .xarray_backend import (
 )
 from . import xarray_accessor  # Register .fa accessor on xarray DataArrays
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__ = "Your Name"
 
 __all__ = [
