@@ -24,7 +24,7 @@ Example usage:
 
 from .core import FADataset, FAVariable, open_fa
 from .reader import FAReader
-from .xarray_backend import FABackendEntrypoint, open_dataset, is_fa_file
+from .xarray_backend import FABackendEntrypoint, open_dataset, open_mfdataset, is_fa_file
 from . import xarray_accessor  # Register .fa accessor on xarray DataArrays
 
 __version__ = "0.1.0"
@@ -38,6 +38,7 @@ __all__ = [
     "FAReader",
     # xarray integration
     "open_dataset",
+    "open_mfdataset",
     "is_fa_file",
     "FABackendEntrypoint",
     # Version

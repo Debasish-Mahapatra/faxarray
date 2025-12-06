@@ -207,3 +207,70 @@ def open_dataset(filename: str, **kwargs) -> xr.Dataset:
     """
     backend = FABackendEntrypoint()
     return backend.open_dataset(filename, **kwargs)
+
+
+def open_mfdataset(
+    paths,
+    concat_dim: str = 'time',
+    progress: bool = False,
+    **kwargs
+) -> xr.Dataset:
+    """
+    Open multiple FA files and concatenate along a dimension.
+    
+    This is a convenience function that opens multiple FA files and 
+    concatenates them, typically along the time dimension.
+    
+    Parameters
+    ----------
+    paths : str or list of str
+        Glob pattern (e.g., 'pf*+*') or list of file paths
+    concat_dim : str, default 'time'
+        Dimension to concatenate along
+    progress : bool, default False
+        Print progress while loading files
+    **kwargs
+        Additional arguments passed to open_dataset
+        
+    Returns
+    -------
+    xarray.Dataset
+        Combined dataset with all files concatenated
+        
+    Example
+    -------
+    >>> ds = fx.open_mfdataset('pf*+*')  # All 25 forecast hours
+    >>> ds['TEMPERATURE'].shape  # (25, 87, 480, 480)
+    >>> ds.time.values  # ['00:00', '01:00', ..., '24:00']
+    """
+    from glob import glob
+    
+    # Handle glob pattern or list of files
+    if isinstance(paths, str):
+        file_list = sorted(glob(paths))
+        if not file_list:
+            raise FileNotFoundError(f"No files found matching pattern: {paths}")
+    else:
+        file_list = list(paths)
+    
+    if progress:
+        print(f"Opening {len(file_list)} FA files...")
+    
+    # Open each file
+    datasets = []
+    for i, filepath in enumerate(file_list):
+        ds = open_dataset(filepath, **kwargs)
+        datasets.append(ds)
+        if progress and (i + 1) % 5 == 0:
+            print(f"  Loaded {i + 1}/{len(file_list)} files...")
+    
+    if progress:
+        print(f"Concatenating along '{concat_dim}' dimension...")
+    
+    # Concatenate along the specified dimension
+    combined = xr.concat(datasets, dim=concat_dim)
+    
+    if progress:
+        print(f"Done! Combined shape: {dict(combined.sizes)}")
+    
+    return combined
