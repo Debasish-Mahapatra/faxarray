@@ -53,7 +53,7 @@ class FADataArrayAccessor:
         -------
         matplotlib.axes.Axes
         """
-        da = self._obj
+        da = self._obj.squeeze()
         
         # Check if we have lat/lon coordinates
         has_latlon = 'lat' in da.coords and 'lon' in da.coords
@@ -96,7 +96,7 @@ class FADataArrayAccessor:
         """
         Plot filled contours using lat/lon coordinates if available.
         """
-        da = self._obj
+        da = self._obj.squeeze()
         has_latlon = 'lat' in da.coords and 'lon' in da.coords
         
         if ax is None:
