@@ -124,3 +124,72 @@ class FADataArrayAccessor:
         plt.tight_layout()
         
         return ax
+    
+    def pcolormesh(self, *args, **kwargs):
+        """Alias for plot()."""
+        return self.plot(*args, **kwargs)
+    
+    def contour(self,
+                levels: int = 10,
+                ax: Optional[plt.Axes] = None,
+                figsize: tuple = (10, 8),
+                colors: str = 'black',
+                **kwargs) -> plt.Axes:
+        """
+        Plot contour lines using lat/lon coordinates if available.
+        """
+        da = self._obj.squeeze()
+        has_latlon = 'lat' in da.coords and 'lon' in da.coords
+        
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = ax.get_figure()
+        
+        if has_latlon:
+            lon = da.coords['lon'].values
+            lat = da.coords['lat'].values
+            cs = ax.contour(lon, lat, da.values, levels=levels, colors=colors, **kwargs)
+            ax.set_xlabel('Longitude')
+            ax.set_ylabel('Latitude')
+        else:
+            cs = ax.contour(da.values, levels=levels, colors=colors, **kwargs)
+            ax.set_xlabel('x')
+            ax.set_ylabel('y')
+            
+        ax.clabel(cs, inline=True, fontsize=8)
+        ax.set_title(da.name or 'Data')
+        plt.tight_layout()
+        
+        return ax
+
+    def imshow(self,
+               ax: Optional[plt.Axes] = None,
+               figsize: tuple = (10, 8),
+               cmap: str = 'viridis',
+               add_colorbar: bool = True,
+               origin: str = 'lower',
+               **kwargs) -> plt.Axes:
+        """
+        Plot using imshow (fast, no geographic coords).
+        """
+        da = self._obj.squeeze()
+        
+        if ax is None:
+            fig, ax = plt.subplots(figsize=figsize)
+        else:
+            fig = ax.get_figure()
+            
+        im = ax.imshow(da.values, cmap=cmap, origin=origin, aspect='auto', **kwargs)
+        
+        if add_colorbar:
+            cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+            if da.name:
+                cbar.set_label(da.name)
+        
+        ax.set_title(da.name or 'Data')
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        plt.tight_layout()
+        
+        return ax
