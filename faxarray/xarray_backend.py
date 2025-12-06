@@ -276,20 +276,71 @@ def open_mfdataset(
     return combined
 
 
+class TarDataset(xr.Dataset):
+    """
+    Wrapper for xarray.Dataset that handles temporary directory cleanup.
+    
+    When this dataset is closed (via .close() or context manager),
+    it automatically deletes the temporary directory if cleanup is enabled.
+    """
+    __slots__ = ('_temp_dir', '_cleanup')
+    
+    def __init__(self, ds: xr.Dataset, temp_dir: str, cleanup: bool = True):
+        super().__init__(ds)
+        self._temp_dir = temp_dir
+        self._cleanup = cleanup
+        self.set_close(self._close_callback)
+    
+    def _close_callback(self):
+        """Cleanup temporary directory on close."""
+        if self._cleanup and self._temp_dir and os.path.exists(self._temp_dir):
+            import shutil
+            shutil.rmtree(self._temp_dir, ignore_errors=True)
+
+
+def _read_single_file(filepath: str, variables=None, stack_levels=True, lazy=False) -> xr.Dataset:
+    """Helper to read a single FA file."""
+    from .core import FADataset
+    
+    fa = FADataset(filepath)
+    try:
+        if lazy:
+            # Lazy loading - dask arrays
+            ds = fa.to_xarray_lazy(variables=variables, stack_levels=stack_levels)
+        else:
+            # Eager loading
+            var_list = list(variables) if variables else None
+            ds = fa.to_xarray(variables=var_list, stack_levels=stack_levels)
+        
+        # Add CF-compliant attributes
+        ds.attrs.update({
+            'source': str(filepath),
+            'Conventions': 'CF-1.8',
+            'institution': 'Météo-France',
+            'source_format': 'FA',
+        })
+        
+        return ds
+    finally:
+        if not lazy:
+            fa.close()
+
+
 def open_tar(
     tarpath: str,
     pattern: str = '*',
     temp_dir: str = None,
-    cleanup: bool = True,
+    chunks: dict = None,
     concat_dim: str = 'time',
+    variables: list = None,
     progress: bool = False,
     **kwargs
-) -> xr.Dataset:
+) -> TarDataset:
     """
     Open FA files from a tar archive.
     
-    Extracts files to a temporary directory, reads them, and optionally
-    cleans up the extracted files after reading.
+    Provides a memory-efficient way to explore data from FA archives using
+    lazy loading (Dask).
     
     Parameters
     ----------
@@ -299,33 +350,43 @@ def open_tar(
         Glob pattern to filter files within the archive (e.g., '*+000*')
     temp_dir : str, optional
         Directory to extract files to. If None, uses system temp.
-        If specified, files are extracted there (useful for caching).
-    cleanup : bool, default True
-        If True, delete extracted files after reading.
-        Set to False to keep extracted files for reuse.
+    chunks : dict, optional
+        Chunk sizes for lazy loading (e.g., {'time': 1}).
+        Providing this is highly recommended for memory efficiency.
+        If None, data will be loaded eagerly (careful with large archives!).
     concat_dim : str, default 'time'
         Dimension to concatenate along
+    variables : list of str, optional
+        Specific variables to load (reduces memory usage)
     progress : bool, default False
         Print progress messages
     **kwargs
-        Additional arguments passed to open_dataset
+        Additional arguments passed to the backend
         
     Returns
     -------
-    xarray.Dataset
-        Combined dataset with all matching files from the archive
+    TarDataset
+        Combined dataset wrapped in TarDataset for cleanup management.
+        Call `ds.close()` when done to cleanup temp files.
         
-    Example
-    -------
-    >>> ds = fx.open_tar('pf20130101.tar.gz')  # All files
-    >>> ds = fx.open_tar('pf20130101.tar.gz', pattern='*+00*')  # Hours 0-9
-    >>> ds = fx.open_tar('pf20130101.tar.gz', temp_dir='/scratch/temp', cleanup=False)
+    Examples
+    --------
+    Exploration mode (lazy, memory-efficient):
+    
+    >>> ds = fx.open_tar('pf20130101.tar.gz', chunks={'time': 1})
+    >>> ds['SURFTEMPERATURE'].isel(time=0).plot()  # Only loads one timestep
+    >>> ds.close()  # Cleanup temp files
+    
+    Using context manager for automatic cleanup:
+    
+    >>> with fx.open_tar('pf20130101.tar.gz', chunks={'time': 1}) as ds:
+    ...     ds['SURFTEMPERATURE'].isel(time=0).plot()
+    ... # Temp files automatically cleaned up
     """
     import tarfile
     import tempfile
     import shutil
     import fnmatch
-    import os
     
     if progress:
         print(f"Opening tar archive: {tarpath}")
@@ -333,11 +394,9 @@ def open_tar(
     # Determine extraction directory
     if temp_dir is None:
         extract_dir = tempfile.mkdtemp(prefix='faxarray_')
-        created_temp = True
     else:
         extract_dir = temp_dir
         os.makedirs(extract_dir, exist_ok=True)
-        created_temp = False
     
     try:
         # Open tar and filter members
@@ -366,23 +425,52 @@ def open_tar(
         if progress:
             print(f"  Reading {len(extracted_files)} FA files...")
         
-        # Read using open_mfdataset
-        ds = open_mfdataset(
-            extracted_files, 
-            concat_dim=concat_dim,
-            progress=progress,
-            **kwargs
-        )
+        # Read files sequentially
+        # Use lazy loading when chunks is requested
+        use_lazy = chunks is not None
+        datasets = []
+        for i, filepath in enumerate(extracted_files):
+            ds = _read_single_file(filepath, variables=variables,
+                                   stack_levels=kwargs.get('stack_levels', True),
+                                   lazy=use_lazy)
+            datasets.append(ds)
+            if progress and (i + 1) % 5 == 0:
+                print(f"  Loaded {i + 1}/{len(extracted_files)} files...")
         
-        # Force load data into memory if cleanup is needed
-        if cleanup and created_temp:
-            ds = ds.load()
+        if progress:
+            print(f"  Concatenating along '{concat_dim}' dimension...")
         
-        return ds
+        # Concatenate along the specified dimension
+        # join='outer' handles variables with different level counts (e.g. 86 vs 87)
+        combined = xr.concat(datasets, dim=concat_dim, join='outer')
         
-    finally:
-        # Cleanup if requested and we created the temp dir
-        if cleanup and created_temp:
+        if progress:
+            print(f"  Combined shape: {dict(combined.sizes)}")
+        
+        # Apply chunking for lazy mode
+        if chunks:
+            combined = combined.chunk(chunks)
             if progress:
-                print(f"  Cleaning up temp files...")
+                print(f"  Applied chunking: {chunks}")
+            # Return wrapped dataset for cleanup on close
+            return TarDataset(combined, extract_dir, cleanup=True)
+        else:
+            # Eager mode: load data and allow cleanup
+            if progress:
+                print(f"  Loading data into memory...")
+            combined = combined.load()
+            
+            if temp_dir is None:  # Only cleanup auto-created temp dirs
+                shutil.rmtree(extract_dir, ignore_errors=True)
+                extract_dir = None
+            
+            if progress:
+                print(f"  Done!")
+            
+            return combined
+            
+    except Exception:
+        # Cleanup on error if we created the temp dir
+        if temp_dir is None and 'extract_dir' in locals() and extract_dir:
             shutil.rmtree(extract_dir, ignore_errors=True)
+        raise

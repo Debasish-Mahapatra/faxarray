@@ -12,6 +12,36 @@ import xarray as xr
 from typing import Dict, List, Optional, Tuple, Union, Iterator
 from pathlib import Path
 from collections import defaultdict
+import threading
+
+try:
+    import dask.array as da
+    from dask import delayed
+    HAS_DASK = True
+except ImportError:
+    HAS_DASK = False
+
+# Global lock for EPyGrAM access (not thread-safe)
+EPYGRAM_LOCK = threading.Lock()
+
+def read_field_delayed(filepath: str, field_name: str):
+    """
+    Read a field lazily using dask.delayed.
+    Crucially, uses a lock to prevent concurrent EPyGrAM access.
+    """
+    if not HAS_DASK:
+        raise ImportError("Dask is required for lazy loading")
+        
+    def _read_with_lock(path, name):
+        with EPYGRAM_LOCK:
+            # Create a FRESH reader for each access to avoid state issues
+            reader = FAReader(path)
+            try:
+                return reader.read_field(name)
+            finally:
+                reader.close()
+    
+    return delayed(_read_with_lock)(filepath, field_name)
 
 from .reader import FAReader, FAGeometry
 from .plotting import PlotAccessor
@@ -651,6 +681,163 @@ class FADataset:
             if lead_time is not None:
                 ds.attrs['lead_time'] = str(lead_time)
         
+        return ds
+    
+    def to_xarray_lazy(self, 
+                       variables: Optional[List[str]] = None,
+                       stack_levels: bool = True) -> xr.Dataset:
+        """
+        Convert to xarray.Dataset using lazy loading (Dask).
+        
+        This avoids loading any data into memory until accessed.
+        Essential for working with large datasets or archives.
+        
+        Parameters
+        ----------
+        variables : list of str, optional
+            Variables to include. If None, includes all.
+        stack_levels : bool, default True
+            If True, automatically stack 3D fields.
+            
+        Returns
+        -------
+        xarray.Dataset
+            Dataset with lazy dask arrays
+        """
+        if not HAS_DASK:
+            raise ImportError("Dask is required for lazy loading")
+            
+        # Get list of variables without loading data
+        all_fields = list(self.variables)
+        if variables:
+            all_fields = [v for v in all_fields if v in variables]
+        
+        # Get shape from geometry
+        shape = self.shape
+        
+        data_vars = {}
+        level_coords = {}
+        processed_fields = set()
+        
+        if stack_levels:
+            level_groups = detect_3d_fields(all_fields)
+            
+            for base_name, group_info in level_groups.items():
+                level_list = group_info['levels']
+                level_type = group_info['type']
+                level_units = group_info['units']
+                level_positive = group_info['positive']
+                
+                if not level_list:
+                    continue
+                
+                level_nums = [lvl for lvl, _ in level_list]
+                field_names = [name for _, name in level_list]
+                
+                # Create lazy array for each level
+                lazy_levels = []
+                for field_name in field_names:
+                    delayed_data = read_field_delayed(self.filepath, field_name)
+                    lazy_arr = da.from_delayed(
+                        delayed_data, 
+                        shape=shape, 
+                        dtype=np.float64
+                    )
+                    lazy_levels.append(lazy_arr)
+                
+                # Stack into 3D lazy array
+                stacked = da.stack(lazy_levels, axis=0)
+                safe_name = base_name.replace('.', '_')
+                
+                # Determine dimension name
+                dim_name = 'level' if level_type == 'model' else 'pressure'
+                
+                data_vars[safe_name] = (
+                    [dim_name, 'y', 'x'], 
+                    stacked, 
+                    {
+                        'level_values': level_nums, 
+                        'level_type': level_type,
+                        'original_fields': field_names,
+                    }
+                )
+                
+                # Store coordinate info
+                if dim_name not in level_coords:
+                    level_coords[dim_name] = {
+                        'values': np.array(level_nums, dtype=np.int32),
+                        'attrs': {
+                            'long_name': 'model level' if level_type == 'model' else 'pressure',
+                            'units': level_units,
+                            'positive': level_positive,
+                        }
+                    }
+                
+                processed_fields.update(field_names)
+            
+            # Add remaining 2D fields as lazy arrays
+            for name in all_fields:
+                if name not in processed_fields:
+                    delayed_data = read_field_delayed(self.filepath, name)
+                    lazy_arr = da.from_delayed(
+                        delayed_data, 
+                        shape=shape, 
+                        dtype=np.float64
+                    )
+                    safe_name = name.replace('.', '_')
+                    data_vars[safe_name] = (['y', 'x'], lazy_arr)
+        else:
+            # No stacking - all 2D lazy arrays
+            for name in all_fields:
+                delayed_data = read_field_delayed(self.filepath, name)
+                lazy_arr = da.from_delayed(
+                    delayed_data, 
+                    shape=shape, 
+                    dtype=np.float64
+                )
+                safe_name = name.replace('.', '_')
+                data_vars[safe_name] = (['y', 'x'], lazy_arr)
+
+        # Build coordinates
+        coords = {
+            'lat': (['y', 'x'], self.lat),
+            'lon': (['y', 'x'], self.lon)
+        }
+        
+        # Add level coordinates
+        for dim_name, coord_info in level_coords.items():
+            coords[dim_name] = coord_info['values']
+            
+        # Get time validity info
+        validity = self._reader.get_validity()
+        valid_time = validity['valid_time']
+        
+        # Create dataset
+        ds = xr.Dataset(
+            data_vars,
+            coords=coords,
+            attrs={
+                'source': self.filepath,
+                'Conventions': 'CF-1.8',
+            }
+        )
+        
+        # Add CF-compliant attributes to level coordinates
+        for dim_name, coord_info in level_coords.items():
+            if dim_name in ds.coords:
+                ds[dim_name].attrs = coord_info['attrs']
+        
+        # Add time dimension
+        if valid_time is not None:
+            ds = ds.expand_dims(dim={'time': 1}, axis=0)
+            import pandas as pd
+            time_value = pd.Timestamp(str(valid_time))
+            ds = ds.assign_coords(time=[time_value])
+            ds['time'].attrs = {
+                'long_name': 'valid time',
+                'standard_name': 'time',
+            }
+            
         return ds
     
     def to_netcdf(self,

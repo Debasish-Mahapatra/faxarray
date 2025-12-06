@@ -25,7 +25,8 @@ Example usage:
 from .core import FADataset, FAVariable, open_fa
 from .reader import FAReader
 from .xarray_backend import (
-    FABackendEntrypoint, open_dataset, open_mfdataset, open_tar, is_fa_file
+    FABackendEntrypoint, open_dataset, open_mfdataset, open_tar, is_fa_file,
+    TarDataset
 )
 from . import xarray_accessor  # Register .fa accessor on xarray DataArrays
 
@@ -42,6 +43,7 @@ __all__ = [
     "open_dataset",
     "open_mfdataset",
     "open_tar",
+    "TarDataset",
     "is_fa_file",
     "FABackendEntrypoint",
     # Version
