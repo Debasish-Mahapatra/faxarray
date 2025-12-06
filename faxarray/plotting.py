@@ -32,7 +32,7 @@ class PlotAccessor:
     
     def __call__(self, 
                  ax: Optional[plt.Axes] = None,
-                 figsize: Tuple[int, int] = (10, 8),
+                 figsize: Optional[Tuple[int, int]] = None,
                  cmap: str = 'viridis',
                  colorbar: bool = True,
                  title: Optional[str] = None,
@@ -68,12 +68,16 @@ class PlotAccessor:
         return var.lon, var.lat, var.data
     
     def _setup_axes(self, ax: Optional[plt.Axes], 
-                    figsize: Tuple[int, int],
+                    figsize: Optional[Tuple[int, int]],
                     projection: bool = False) -> Tuple[plt.Figure, plt.Axes]:
         """Create or get axes for plotting."""
         if ax is not None:
             fig = ax.get_figure()
             return fig, ax
+        
+        # Default figure size if not specified
+        if figsize is None:
+            figsize = (10, 8)
         
         if projection:
             try:
@@ -91,17 +95,10 @@ class PlotAccessor:
             fig, ax = plt.subplots(figsize=figsize)
         
         return fig, ax
-    
-    def _add_colorbar(self, fig: plt.Figure, ax: plt.Axes, 
-                      mappable, label: Optional[str] = None):
-        """Add colorbar to plot."""
-        cbar = fig.colorbar(mappable, ax=ax, shrink=0.8, pad=0.02)
-        if label:
-            cbar.set_label(label)
-    
+
     def pcolormesh(self,
                    ax: Optional[plt.Axes] = None,
-                   figsize: Tuple[int, int] = (10, 8),
+                   figsize: Optional[Tuple[int, int]] = None,
                    cmap: str = 'viridis',
                    colorbar: bool = True,
                    title: Optional[str] = None,
@@ -111,29 +108,6 @@ class PlotAccessor:
                    **kwargs) -> plt.Axes:
         """
         Plot using pcolormesh.
-        
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on
-        figsize : tuple
-            Figure size
-        cmap : str
-            Colormap
-        colorbar : bool
-            Add colorbar
-        title : str, optional
-            Plot title
-        use_cartopy : bool
-            Use cartopy for geographic projection
-        vmin, vmax : float, optional
-            Color scale limits
-        **kwargs
-            Passed to pcolormesh
-            
-        Returns
-        -------
-        matplotlib.axes.Axes
         """
         lon, lat, data = self._get_plot_data()
         fig, ax = self._setup_axes(ax, figsize, projection=use_cartopy)
@@ -167,7 +141,7 @@ class PlotAccessor:
     def contourf(self,
                  levels: int = 20,
                  ax: Optional[plt.Axes] = None,
-                 figsize: Tuple[int, int] = (10, 8),
+                 figsize: Optional[Tuple[int, int]] = None,
                  cmap: str = 'viridis',
                  colorbar: bool = True,
                  title: Optional[str] = None,
@@ -177,31 +151,6 @@ class PlotAccessor:
                  **kwargs) -> plt.Axes:
         """
         Plot using filled contours.
-        
-        Parameters
-        ----------
-        levels : int or array-like
-            Number of contour levels or explicit levels
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on
-        figsize : tuple
-            Figure size
-        cmap : str
-            Colormap
-        colorbar : bool
-            Add colorbar
-        title : str, optional
-            Plot title
-        use_cartopy : bool
-            Use cartopy for geographic projection
-        vmin, vmax : float, optional
-            Color scale limits
-        **kwargs
-            Passed to contourf
-            
-        Returns
-        -------
-        matplotlib.axes.Axes
         """
         lon, lat, data = self._get_plot_data()
         fig, ax = self._setup_axes(ax, figsize, projection=use_cartopy)
@@ -234,7 +183,7 @@ class PlotAccessor:
     def contour(self,
                 levels: int = 10,
                 ax: Optional[plt.Axes] = None,
-                figsize: Tuple[int, int] = (10, 8),
+                figsize: Optional[Tuple[int, int]] = None,
                 colors: str = 'black',
                 title: Optional[str] = None,
                 use_cartopy: bool = True,
@@ -242,29 +191,6 @@ class PlotAccessor:
                 **kwargs) -> plt.Axes:
         """
         Plot using line contours.
-        
-        Parameters
-        ----------
-        levels : int or array-like
-            Number of contour levels or explicit levels
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on
-        figsize : tuple
-            Figure size
-        colors : str
-            Contour line color
-        title : str, optional
-            Plot title
-        use_cartopy : bool
-            Use cartopy for geographic projection
-        clabel : bool
-            Add contour labels
-        **kwargs
-            Passed to contour
-            
-        Returns
-        -------
-        matplotlib.axes.Axes
         """
         lon, lat, data = self._get_plot_data()
         fig, ax = self._setup_axes(ax, figsize, projection=use_cartopy)
@@ -293,7 +219,7 @@ class PlotAccessor:
     
     def imshow(self,
                ax: Optional[plt.Axes] = None,
-               figsize: Tuple[int, int] = (10, 8),
+               figsize: Optional[Tuple[int, int]] = None,
                cmap: str = 'viridis',
                colorbar: bool = True,
                title: Optional[str] = None,
@@ -301,27 +227,6 @@ class PlotAccessor:
                **kwargs) -> plt.Axes:
         """
         Plot using imshow (fast, no geographic projection).
-        
-        Parameters
-        ----------
-        ax : matplotlib.axes.Axes, optional
-            Axes to plot on
-        figsize : tuple
-            Figure size
-        cmap : str
-            Colormap
-        colorbar : bool
-            Add colorbar
-        title : str, optional
-            Plot title
-        origin : str
-            Origin position ('lower' or 'upper')
-        **kwargs
-            Passed to imshow
-            
-        Returns
-        -------
-        matplotlib.axes.Axes
         """
         fig, ax = self._setup_axes(ax, figsize, projection=False)
         

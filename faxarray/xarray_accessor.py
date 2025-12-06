@@ -29,7 +29,7 @@ class FADataArrayAccessor:
     
     def plot(self, 
              ax: Optional[plt.Axes] = None,
-             figsize: tuple = (10, 8),
+             figsize: Optional[tuple] = None,
              cmap: str = 'viridis',
              add_colorbar: bool = True,
              **kwargs) -> plt.Axes:
@@ -89,7 +89,7 @@ class FADataArrayAccessor:
     def contourf(self, 
                  levels: int = 20,
                  ax: Optional[plt.Axes] = None,
-                 figsize: tuple = (10, 8),
+                 figsize: Optional[tuple] = None,
                  cmap: str = 'viridis',
                  add_colorbar: bool = True,
                  **kwargs) -> plt.Axes:
@@ -100,6 +100,8 @@ class FADataArrayAccessor:
         has_latlon = 'lat' in da.coords and 'lon' in da.coords
         
         if ax is None:
+            if figsize is None:
+                figsize = (10, 8)
             fig, ax = plt.subplots(figsize=figsize)
         else:
             fig = ax.get_figure()
@@ -132,7 +134,7 @@ class FADataArrayAccessor:
     def contour(self,
                 levels: int = 10,
                 ax: Optional[plt.Axes] = None,
-                figsize: tuple = (10, 8),
+                figsize: Optional[tuple] = None,
                 colors: str = 'black',
                 **kwargs) -> plt.Axes:
         """
@@ -142,6 +144,8 @@ class FADataArrayAccessor:
         has_latlon = 'lat' in da.coords and 'lon' in da.coords
         
         if ax is None:
+            if figsize is None:
+                figsize = (10, 8)
             fig, ax = plt.subplots(figsize=figsize)
         else:
             fig = ax.get_figure()
@@ -165,7 +169,7 @@ class FADataArrayAccessor:
 
     def imshow(self,
                ax: Optional[plt.Axes] = None,
-               figsize: tuple = (10, 8),
+               figsize: Optional[tuple] = None,
                cmap: str = 'viridis',
                add_colorbar: bool = True,
                origin: str = 'lower',
@@ -176,6 +180,8 @@ class FADataArrayAccessor:
         da = self._obj.squeeze()
         
         if ax is None:
+            if figsize is None:
+                figsize = (10, 8)
             fig, ax = plt.subplots(figsize=figsize)
         else:
             fig = ax.get_figure()
