@@ -1,14 +1,13 @@
 # faxarray
 
-**Fast, user-friendly interface for Météo-France FA files**
+**User-friendly interface for Météo-France FA files with xarray integration**
 
-A modern Python package that replaces EPyGrAM with a clean, xarray-like API. Provides easy plotting and fast NetCDF conversion.
+A Python package that wraps EPyGrAM with a clean, xarray-like API. Provides easy plotting and NetCDF conversion.
 
 ## Features
 
-- 🚀 **6x faster** than EPyGrAM for NetCDF conversion
 - 📊 **Easy plotting** with `.plot()` methods (like xarray)
-- 🔄 **Native xarray backend** - use `xr.open_dataset()` directly on FA files!
+- 🔄 **Native xarray backend** - use `xr.open_dataset()` directly on FA files
 - 📁 **Simple API** - no complex initialization required
 - 🛠️ **CLI tool** for quick operations
 
@@ -22,24 +21,26 @@ pip install -e .
 pip install -e ".[plotting]"
 ```
 
+**Note:** Requires [EPyGrAM](https://github.com/UMR-CNRM/EPyGrAM) to be installed for FA file reading.
+
 ## Quick Start
 
-### Option 1: Native xarray (recommended for xarray users)
+### Option 1: Native xarray (recommended)
 
 ```python
 import xarray as xr
 import faxarray  # Just import to register the backend
 
-# Open FA file - auto-detects format!
-ds = xr.open_dataset('pfABOFABOF+0001')  # No engine needed
-ds = xr.open_dataset('file.sfx')          # SURFEX files work too
+# Open FA file - auto-detects format
+ds = xr.open_dataset('pfABOFABOF+0001')
+ds = xr.open_dataset('file.sfx')  # SURFEX files work too
 
 # All xarray operations work directly
 print(ds['SURFTEMPERATURE'].mean())
-ds.to_netcdf('output.nc')  # Fast conversion!
+ds.to_netcdf('output.nc')
 ```
 
-### Option 2: faxarray native API (more features)
+### Option 2: faxarray native API
 
 ```python
 import faxarray as fx
@@ -61,9 +62,9 @@ temp_3d = fa.stack_levels('TEMPERATURE')  # Shape: (levels, y, x)
 # Convert to xarray
 ds = fa.to_xarray()
 
-# Export to NetCDF (fast!)
-fa.to_netcdf('output.nc')  # ~10s for 3000 fields
-fa.to_netcdf('output.nc', compress='zlib')  # Smaller file, ~40s
+# Export to NetCDF
+fa.to_netcdf('output.nc')
+fa.to_netcdf('output.nc', compress='zlib')  # With compression
 ```
 
 ## Command Line Interface
@@ -80,18 +81,7 @@ faxarray convert input.fa output.nc --compress zlib
 # Quick plot
 faxarray plot file.fa -f S001TEMPERATURE
 faxarray plot file.fa -f SURFTEMPERATURE -o temp.png
-
-# Benchmark
-faxarray benchmark file.fa
 ```
-
-## Performance Comparison
-
-| Method | 2908 fields (1.1GB) | Output Size |
-|--------|---------------------|-------------|
-| EPyGrAM CLI | 66s | 1.65 GB |
-| **faxarray** (uncompressed) | **10s** | 5.4 GB |
-| **faxarray** (zlib) | **41s** | 1.85 GB |
 
 ## API Reference
 
@@ -142,7 +132,7 @@ A single variable from an FA file.
 - xarray
 - netCDF4
 - matplotlib
-- epygram (for FA file reading)
+- [epygram](https://github.com/UMR-CNRM/EPyGrAM) (for FA file reading)
 - cartopy (optional, for geographic projections)
 
 ## License
