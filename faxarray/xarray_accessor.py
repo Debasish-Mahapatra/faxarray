@@ -100,8 +100,6 @@ class FADataArrayAccessor:
         has_latlon = 'lat' in da.coords and 'lon' in da.coords
         
         if ax is None:
-            if figsize is None:
-                figsize = (10, 8)
             fig, ax = plt.subplots(figsize=figsize)
         else:
             fig = ax.get_figure()
@@ -144,8 +142,6 @@ class FADataArrayAccessor:
         has_latlon = 'lat' in da.coords and 'lon' in da.coords
         
         if ax is None:
-            if figsize is None:
-                figsize = (10, 8)
             fig, ax = plt.subplots(figsize=figsize)
         else:
             fig = ax.get_figure()
@@ -180,8 +176,6 @@ class FADataArrayAccessor:
         da = self._obj.squeeze()
         
         if ax is None:
-            if figsize is None:
-                figsize = (10, 8)
             fig, ax = plt.subplots(figsize=figsize)
         else:
             fig = ax.get_figure()

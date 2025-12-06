@@ -76,8 +76,8 @@ class PlotAccessor:
             return fig, ax
         
         # Default figure size if not specified
-        if figsize is None:
-            figsize = (10, 8)
+        # If figsize is None, matplotlib uses rcParams default
+
         
         if projection:
             try:
