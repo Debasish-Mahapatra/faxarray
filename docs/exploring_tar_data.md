@@ -35,16 +35,13 @@ temp = ds['SURFTEMPERATURE'].isel(time=0)
 temp.plot()
 ```
 
-## Automatic Cleanup
+## Cleanup
 
-When you open a tar file, `faxarray` extracts files to a temporary directory. Use a context manager for automatic cleanup:
+When using the default eager loading mode, temporary files are automatically cleaned up after data is loaded into memory. No manual cleanup is required.
 
 ```python
-with fx.open_tar('pf20130101.tar.gz') as ds:
-    # Do your analysis here
-    ds['SURFTEMPERATURE'].mean(dim=['x', 'y']).plot()
-
-# Temporary files are automatically deleted here
+# No cleanup needed - temp files deleted automatically after load
+ds = fx.open_tar('pf20130101.tar.gz')
 ```
 
 ## Performance Tips
