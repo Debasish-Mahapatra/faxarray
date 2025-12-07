@@ -212,14 +212,18 @@ def open_dataset(filename: str, **kwargs) -> xr.Dataset:
 def open_mfdataset(
     paths,
     concat_dim: str = 'time',
+    deaccumulate: list = None,
+    chunk_hours: int = 1,
+    output_file: str = None,
     progress: bool = False,
     **kwargs
 ) -> xr.Dataset:
     """
     Open multiple FA files and concatenate along a dimension.
     
-    This is a convenience function that opens multiple FA files and 
-    concatenates them, typically along the time dimension.
+    This function opens multiple FA files, optionally de-accumulates
+    specified fields, and concatenates them along the time dimension.
+    Supports streaming to NetCDF for memory-efficient processing.
     
     Parameters
     ----------
@@ -227,6 +231,15 @@ def open_mfdataset(
         Glob pattern (e.g., 'pf*+*') or list of file paths
     concat_dim : str, default 'time'
         Dimension to concatenate along
+    deaccumulate : list of str, optional
+        List of variable names to de-accumulate (convert from cumulative
+        to hourly values). For these fields: hourly[t] = val[t] - val[t-1]
+    chunk_hours : int, default 1
+        Number of hours to hold in memory at once when streaming.
+        Lower values use less memory but may be slower.
+    output_file : str, optional
+        If provided, stream results directly to this NetCDF file.
+        This enables processing datasets larger than available memory.
     progress : bool, default False
         Print progress while loading files
     **kwargs
@@ -235,15 +248,27 @@ def open_mfdataset(
     Returns
     -------
     xarray.Dataset
-        Combined dataset with all files concatenated
+        Combined dataset with all files concatenated.
+        For de-accumulated fields, values are hourly (not cumulative).
+        Output has N-1 timesteps where N is number of input files
+        (first file is used as baseline).
         
-    Example
-    -------
-    >>> ds = fx.open_mfdataset('pf*+*')  # All 25 forecast hours
-    >>> ds['TEMPERATURE'].shape  # (25, 87, 480, 480)
-    >>> ds.time.values  # ['00:00', '01:00', ..., '24:00']
+    Examples
+    --------
+    >>> # Basic usage
+    >>> ds = fx.open_mfdataset('pf*+*')
+    
+    >>> # With de-accumulation
+    >>> ds = fx.open_mfdataset('pf*+*', 
+    ...     deaccumulate=['SURFPREC.EAU.CON', 'SURFPREC.EAU.GEC'])
+    
+    >>> # Stream to file (memory efficient)
+    >>> fx.open_mfdataset('pf*+*', 
+    ...     deaccumulate=['SURFPREC.EAU.CON'],
+    ...     output_file='output.nc')
     """
     from glob import glob
+    import re
     
     # Handle glob pattern or list of files
     if isinstance(paths, str):
@@ -253,27 +278,126 @@ def open_mfdataset(
     else:
         file_list = list(paths)
     
-    if progress:
-        print(f"Opening {len(file_list)} FA files...")
+    # Sort by forecast hour (extract from filename like +0001, +0024)
+    def extract_hour(filepath):
+        match = re.search(r'\+(\d{4})$', filepath)
+        return int(match.group(1)) if match else 0
     
-    # Open each file
-    datasets = []
+    file_list = sorted(file_list, key=extract_hour)
+    
+    if len(file_list) < 2:
+        raise ValueError("Need at least 2 files for de-accumulation")
+    
+    if progress:
+        print(f"Processing {len(file_list)} FA files...")
+        if deaccumulate:
+            print(f"  De-accumulating: {deaccumulate}")
+    
+    deaccumulate = deaccumulate or []
+    
+    # Process in chunks
+    result_datasets = []
+    prev_ds = None
+    
     for i, filepath in enumerate(file_list):
+        if progress:
+            hour = extract_hour(filepath)
+            print(f"  [{i+1}/{len(file_list)}] Loading +{hour:04d}...")
+        
+        # Load current file
         ds = open_dataset(filepath, **kwargs)
-        datasets.append(ds)
-        if progress and (i + 1) % 5 == 0:
-            print(f"  Loaded {i + 1}/{len(file_list)} files...")
+        
+        # Skip first file - it's the baseline for de-accumulation
+        # For non-deaccumulated vars, we also skip hour 0 for consistency
+        if i == 0:
+            prev_ds = ds
+            continue
+        
+        # Create output dataset for this timestep
+        result_vars = {}
+        
+        # Normalize deaccumulate list (handle both SURFPREC.EAU.CON and SURFPREC_EAU_CON)
+        deaccum_normalized = set()
+        for name in deaccumulate:
+            deaccum_normalized.add(name)
+            deaccum_normalized.add(name.replace('.', '_'))
+        
+        for var_name in ds.data_vars:
+            if var_name in deaccum_normalized:
+                # De-accumulate: hourly = current - previous
+                if var_name in prev_ds.data_vars:
+                    # Use .values to avoid coordinate alignment issues (time dim)
+                    curr_data = ds[var_name].values
+                    prev_data = prev_ds[var_name].values
+                    hourly_data = curr_data - prev_data
+                    # Create new DataArray with current file's structure (without time dim issues)
+                    result_vars[var_name] = xr.DataArray(
+                        hourly_data.squeeze(),  # Remove singleton dimensions
+                        dims=['y', 'x'] if hourly_data.squeeze().ndim == 2 else ds[var_name].squeeze().dims,
+                        attrs=ds[var_name].attrs
+                    )
+                else:
+                    result_vars[var_name] = ds[var_name].squeeze()
+            else:
+                # Keep as-is (squeeze to remove singleton time dim)
+                result_vars[var_name] = ds[var_name].squeeze()
+        
+        # Create dataset for this timestep
+        timestep_ds = xr.Dataset(result_vars, coords=ds.coords, attrs=ds.attrs)
+        result_datasets.append(timestep_ds)
+        
+        # Update previous for next iteration
+        prev_ds = ds
+        
+        # If streaming to file and we've accumulated enough chunks
+        if output_file and len(result_datasets) >= chunk_hours:
+            _append_to_netcdf(result_datasets, output_file, concat_dim, progress)
+            result_datasets = []
     
-    if progress:
-        print(f"Concatenating along '{concat_dim}' dimension...")
+    # Handle remaining datasets
+    if output_file:
+        if result_datasets:
+            _append_to_netcdf(result_datasets, output_file, concat_dim, progress)
+        if progress:
+            print(f"Done! Saved to {output_file}")
+        # Return the written file as dataset
+        return xr.open_dataset(output_file)
+    else:
+        # In-memory concatenation
+        if progress:
+            print(f"Concatenating {len(result_datasets)} timesteps...")
+        
+        combined = xr.concat(result_datasets, dim=concat_dim)
+        
+        if progress:
+            print(f"Done! Shape: {dict(combined.sizes)}")
+        
+        return combined
+
+
+def _append_to_netcdf(datasets: list, filepath: str, dim: str, progress: bool = False):
+    """Append datasets to NetCDF file (create if doesn't exist)."""
+    import os
     
-    # Concatenate along the specified dimension
-    combined = xr.concat(datasets, dim=concat_dim)
+    combined = xr.concat(datasets, dim=dim)
     
-    if progress:
-        print(f"Done! Combined shape: {dict(combined.sizes)}")
-    
-    return combined
+    if os.path.exists(filepath):
+        # Append to existing file
+        if progress:
+            print(f"    Appending {len(datasets)} timesteps to {filepath}...")
+        
+        # Load existing, concat, and overwrite (xarray doesn't support true append)
+        existing = xr.open_dataset(filepath)
+        merged = xr.concat([existing, combined], dim=dim)
+        existing.close()
+        merged.to_netcdf(filepath, mode='w')
+    else:
+        # Create new file
+        if progress:
+            print(f"    Writing {len(datasets)} timesteps to {filepath}...")
+        combined.to_netcdf(filepath)
+
+
 
 
 class TarDataset(xr.Dataset):

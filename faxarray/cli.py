@@ -157,6 +157,54 @@ def fa2nc_main():
         fa.close()
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
+        return 0
+
+
+def cmd_convert_multi(args):
+    """Convert multiple FA files to NetCDF with de-accumulation."""
+    from .xarray_backend import open_mfdataset
+    
+    # Build list of variables to de-accumulate
+    deaccum_vars = []
+    
+    # From -d flag (space or comma separated)
+    if args.deaccumulate:
+        for item in args.deaccumulate:
+            # Handle comma-separated values
+            deaccum_vars.extend(item.split(','))
+    
+    # From --dlist file
+    if args.dlist:
+        try:
+            with open(args.dlist, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        deaccum_vars.append(line)
+        except FileNotFoundError:
+            print(f"Error: File not found: {args.dlist}", file=sys.stderr)
+            return 1
+    
+    # Remove duplicates while preserving order
+    seen = set()
+    deaccum_vars = [v for v in deaccum_vars if not (v in seen or seen.add(v))]
+    
+    if not args.quiet:
+        print(f"Converting {args.input} -> {args.output}")
+        if deaccum_vars:
+            print(f"  De-accumulating: {deaccum_vars}")
+        print(f"  Chunk size: {args.chunk_hours} hour(s)")
+    
+    try:
+        open_mfdataset(
+            args.input,
+            deaccumulate=deaccum_vars if deaccum_vars else None,
+            chunk_hours=args.chunk_hours,
+            output_file=args.output,
+            progress=not args.quiet
+        )
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
         return 1
     
     return 0
@@ -203,6 +251,20 @@ def main():
     bench_parser = subparsers.add_parser('benchmark', help='Benchmark conversion')
     bench_parser.add_argument('file', help='FA file path')
     
+    # convert-multi command
+    multi_parser = subparsers.add_parser('convert-multi', 
+        help='Convert multiple FA files to NetCDF with de-accumulation')
+    multi_parser.add_argument('input', help='Input pattern (e.g., pf*+*)')
+    multi_parser.add_argument('output', help='Output NetCDF file')
+    multi_parser.add_argument('-d', '--deaccumulate', nargs='*', default=[],
+                              help='Variables to de-accumulate (space or comma separated)')
+    multi_parser.add_argument('--dlist', metavar='FILE',
+                              help='File with list of variables to de-accumulate (one per line)')
+    multi_parser.add_argument('--chunk-hours', type=int, default=1,
+                              help='Hours to hold in memory at once (default: 1)')
+    multi_parser.add_argument('--quiet', '-q', action='store_true',
+                              help='Quiet mode')
+    
     args = parser.parse_args()
     
     if args.command is None:
@@ -214,6 +276,7 @@ def main():
         'convert': cmd_convert,
         'plot': cmd_plot,
         'benchmark': cmd_benchmark,
+        'convert-multi': cmd_convert_multi,
     }
     
     try:
