@@ -13,39 +13,53 @@ Many meteorological datasets are distributed as tar archives containing multiple
 
 ## Quick Start
 
+Just two required arguments - the archive and where to extract:
+
 ```python
 import faxarray as fx
 
-# Open a tar archive
-ds = fx.open_tar('pf20130101.tar.gz', temp_dir='/scratch/myuser/temp')
+# Open archive (only 2 required args)
+ds = fx.open_tar('pf20130101.tar.gz', '/scratch/temp')
 
-# Explore the data
-print(ds)
-print(ds.data_vars)
+# Data is lazy-loaded, use standard xarray to filter:
+temp = ds['SURFTEMPERATURE']           # Select variable
+temp = temp.isel(time=0)               # Select timestep
+temp.plot()                            # Only NOW is data loaded
 
-# Access a variable (data loaded on demand)
-temp = ds['SURFTEMPERATURE']
-print(temp.mean().values)
+ds.close()  # Cleanup temp files
+```
 
-# Plot a single timestep
-temp.isel(time=0).plot()
+**Key concept**: All data stays on disk until you access it. Use xarray's built-in methods (`.sel()`, `.isel()`, `['var']`) to filter - only the data you touch is loaded to RAM.
 
-# IMPORTANT: Always close to cleanup temp files
+## Filtering Data
+
+Since loading is lazy, filter using standard xarray after opening:
+
+```python
+ds = fx.open_tar('archive.tar.gz', '/tmp/data')
+
+# Select by variable name
+precip = ds['SURFPREC.EAU.CON']
+
+# Select by time index
+hour_0 = ds.isel(time=0)
+
+# Select by time value
+morning = ds.sel(time=slice('2013-01-01T00:00', '2013-01-01T06:00'))
+
+# Combine
+result = ds['SURFTEMPERATURE'].isel(time=0).mean()
+
 ds.close()
 ```
 
 ## Function Signature
 
 ```python
-fx.open_tar(
-    tarpath,           # Path to archive (required)
-    temp_dir,          # Directory for extraction (required)
-    pattern='*',       # Glob pattern to filter files
-    concat_dim='time', # Dimension to concatenate along
-    variables=None,    # Specific variables to load
-    progress=False     # Show progress messages
-)
+fx.open_tar(tarpath, temp_dir, pattern='*', variables=None, progress=False)
 ```
+
+Only `tarpath` and `temp_dir` are required. The optional parameters (`pattern`, `variables`) are for **advanced optimization** - see below.
 
 ## Parameters Explained
 
