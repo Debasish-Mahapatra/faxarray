@@ -307,11 +307,15 @@ def open_mfdataset(
         # Load current file
         ds = open_dataset(filepath, **kwargs)
         
-        # Skip first file - it's the baseline for de-accumulation
-        # For non-deaccumulated vars, we also skip hour 0 for consistency
+        # Handle first file differently based on whether we're de-accumulating
         if i == 0:
-            prev_ds = ds
-            continue
+            if deaccumulate:
+                # Keep as baseline for de-accumulation
+                prev_ds = ds
+                continue
+            else:
+                # No de-accumulation, process all files including first
+                pass
         
         # Create output dataset for this timestep
         result_vars = {}
@@ -323,7 +327,7 @@ def open_mfdataset(
             deaccum_normalized.add(name.replace('.', '_'))
         
         for var_name in ds.data_vars:
-            if var_name in deaccum_normalized:
+            if var_name in deaccum_normalized and prev_ds is not None:
                 # De-accumulate: hourly = current - previous
                 if var_name in prev_ds.data_vars:
                     # Use .values to avoid coordinate alignment issues (time dim)
@@ -344,15 +348,33 @@ def open_mfdataset(
         
         # Create dataset for this timestep
         timestep_ds = xr.Dataset(result_vars, coords=ds.coords, attrs=ds.attrs)
-        result_datasets.append(timestep_ds)
         
-        # Update previous for next iteration
-        prev_ds = ds
+        # If streaming to file, write immediately (don't accumulate)
+        if output_file:
+            _append_to_netcdf([timestep_ds], output_file, concat_dim, progress)
+            # Clear memory immediately
+            del timestep_ds
+            del result_vars
+        else:
+            result_datasets.append(timestep_ds)
+            # If in-memory mode and we've accumulated enough chunks
+            if len(result_datasets) >= chunk_hours:
+                # Keep for later concat (in-memory mode)
+                pass
         
-        # If streaming to file and we've accumulated enough chunks
-        if output_file and len(result_datasets) >= chunk_hours:
-            _append_to_netcdf(result_datasets, output_file, concat_dim, progress)
-            result_datasets = []
+        # Only keep prev_ds if we're doing de-accumulation
+        if deaccumulate:
+            # Release old prev_ds memory before assigning new one
+            if prev_ds is not None and prev_ds is not ds:
+                del prev_ds
+            prev_ds = ds
+        else:
+            # No de-accumulation - don't keep any reference
+            del ds
+        
+        # Force garbage collection periodically
+        import gc
+        gc.collect()
     
     # Handle remaining datasets
     if output_file:
