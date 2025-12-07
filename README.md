@@ -2,7 +2,7 @@
 
 **User-friendly interface for Météo-France FA files with xarray integration**
 
-A Python package that wraps EPyGrAM with a clean, xarray-like API. Provides easy plotting, tar archive support, and NetCDF conversion.
+A Python package that wraps EPyGrAM with a clean, xarray-like API for handling FA files. Provides easy plotting, tar archive support, and NetCDF conversion.
 
 ## Features
 
