@@ -6,12 +6,12 @@ A Python package that wraps EPyGrAM with a clean, xarray-like API. Provides easy
 
 ## Features
 
-- 📊 **Easy plotting** with `.plot()` methods (like xarray)
-- 🔄 **Native xarray backend** - use `xr.open_dataset()` directly on FA files
-- 📦 **Tar archive support** - open FA files directly from `.tar.gz` archives
-- 🔀 **Multi-file conversion** - combine multiple FA files into one NetCDF
-- 📁 **Simple API** - no complex initialization required
-- 🛠️ **CLI tool** for quick operations
+- Easy plotting with `.plot()` methods (like xarray)
+- Native xarray backend - use `xr.open_dataset()` directly on FA files
+- Tar archive support - open FA files directly from `.tar.gz` archives
+- Multi-file conversion - combine multiple FA files into one NetCDF
+- Simple API - no complex initialization required
+- CLI tool for quick operations
 
 ## Installation
 
