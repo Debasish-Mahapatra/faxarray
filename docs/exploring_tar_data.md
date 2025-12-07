@@ -1,53 +1,60 @@
 # Exploring FA Data from Tar Archives
 
-`faxarray` provides a workflow for exploring FA files directly from `.tar.gz` archives without extracting them manually.
+`faxarray` provides a workflow for exploring FA files directly from `.tar.gz` archives.
 
-## Loading Modes
-
-### Eager Loading (Default, Recommended)
-
-Data is loaded immediately into memory. This is the default and recommended mode:
+## Basic Usage
 
 ```python
 import faxarray as fx
 
-# Eager loading - data loaded into memory immediately
-ds = fx.open_tar('pf20130101.tar.gz')
+# Open archive - temp_dir is required
+ds = fx.open_tar('pf20130101.tar.gz', temp_dir='/tmp/mydata')
+
+# Access data (lazy loading - data loaded on demand)
+print(ds['SURFTEMPERATURE'])
+
+# Cleanup temp files when done
+ds.close()
 ```
 
-**Cleanup**: Temporary files are deleted automatically after loading.
+## How It Works
 
-### Lazy Loading (Experimental, Not Recommended)
+1. Files are extracted to `temp_dir`
+2. Data is read lazily (Dask arrays)
+3. Data is loaded from disk only when accessed
+4. `ds.close()` deletes the temp directory
 
-Data stays on disk until accessed. Uses Dask for chunked operations:
+## Memory Control
+
+Specify variables to limit what's loaded:
 
 ```python
-# Lazy loading - data stays on disk (EXPERIMENTAL)
-ds = fx.open_tar('pf20130101.tar.gz', chunks={'time': 1})
+ds = fx.open_tar('archive.tar.gz',
+                 temp_dir='/tmp/mydata',
+                 variables=['SURFTEMPERATURE'])
 ```
 
-> **Warning**: Lazy loading may cause **segfaults** due to epygram's C libraries not being thread-safe. Use eager loading for production.
+## Filter Files
 
-**Cleanup**: Call `ds.close()` to delete temporary files.
-
-## Low Memory: Specify Variables
-
-To reduce memory usage, only load the variables you need:
+Only extract certain timesteps:
 
 ```python
-ds = fx.open_tar('pf20130101.tar.gz', 
-                 variables=['SURFTEMPERATURE', 'SURFPREC.EAU.CON'])
+ds = fx.open_tar('archive.tar.gz',
+                 temp_dir='/tmp/mydata',
+                 pattern='*+000*')  # Only hour 0
 ```
 
-## Plotting
+## Parameters
 
-```python
-temp = ds['SURFTEMPERATURE'].isel(time=0)
-temp.plot()
-```
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `tarpath` | Yes | Path to tar archive |
+| `temp_dir` | Yes | Directory to extract files to |
+| `variables` | No | List of variables to load |
+| `pattern` | No | Glob pattern to filter files |
 
-## Performance Tips
+## Important
 
-1. **Specify variables**: Use `variables=['VAR1', 'VAR2']` to limit memory
-2. **Filter timesteps**: Use `pattern='*+000*'` to extract only certain files
-3. **Cache extraction**: Set `temp_dir='/path/to/cache'` to avoid re-extraction
+- **Always call `ds.close()`** to delete temp files
+- Data uses lazy loading (loaded when accessed)
+- Use `variables` parameter to reduce memory

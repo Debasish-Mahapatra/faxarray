@@ -515,9 +515,8 @@ def _read_single_file(filepath: str, variables=None, stack_levels=True, lazy=Fal
 
 def open_tar(
     tarpath: str,
+    temp_dir: str,
     pattern: str = '*',
-    temp_dir: str = None,
-    chunks: dict = None,
     concat_dim: str = 'time',
     variables: list = None,
     progress: bool = False,
@@ -526,25 +525,17 @@ def open_tar(
     """
     Open FA files from a tar archive.
     
-    Extracts FA files to a temporary directory and reads them.
-    
-    Note: Dask lazy loading (via chunks parameter) is available but may
-    cause segfaults due to epygram's underlying C libraries not being
-    thread-safe. For production use, prefer eager loading with variables
-    parameter to limit memory usage.
+    Extracts FA files to a temporary directory and reads them using lazy loading.
+    Data is loaded on demand when accessed.
     
     Parameters
     ----------
     tarpath : str
         Path to the tar archive (.tar, .tar.gz, .tgz)
+    temp_dir : str
+        Directory to extract files to. Required.
     pattern : str, default '*'
         Glob pattern to filter files within the archive (e.g., '*+000*')
-    temp_dir : str, optional
-        Directory to extract files to. If None, uses system temp.
-    chunks : dict, optional
-        Chunk sizes for lazy loading (e.g., {'time': 1}).
-        Providing this is highly recommended for memory efficiency.
-        If None, data will be loaded eagerly (careful with large archives!).
     concat_dim : str, default 'time'
         Dimension to concatenate along
     variables : list of str, optional
@@ -557,22 +548,13 @@ def open_tar(
     Returns
     -------
     TarDataset
-        Combined dataset wrapped in TarDataset for cleanup management.
-        Call `ds.close()` when done to cleanup temp files.
+        Combined dataset. Call `ds.close()` when done to cleanup temp files.
         
     Examples
     --------
-    Exploration mode (lazy, memory-efficient):
-    
-    >>> ds = fx.open_tar('pf20130101.tar.gz', chunks={'time': 1})
-    >>> ds['SURFTEMPERATURE'].isel(time=0).plot()  # Only loads one timestep
+    >>> ds = fx.open_tar('pf20130101.tar.gz', temp_dir='/tmp/mydata')
+    >>> ds['SURFTEMPERATURE'].isel(time=0).plot()
     >>> ds.close()  # Cleanup temp files
-    
-    Using context manager for automatic cleanup:
-    
-    >>> with fx.open_tar('pf20130101.tar.gz', chunks={'time': 1}) as ds:
-    ...     ds['SURFTEMPERATURE'].isel(time=0).plot()
-    ... # Temp files automatically cleaned up
     """
     import tarfile
     import tempfile
@@ -582,12 +564,15 @@ def open_tar(
     if progress:
         print(f"Opening tar archive: {tarpath}")
     
-    # Determine extraction directory
+    # temp_dir is required
     if temp_dir is None:
-        extract_dir = tempfile.mkdtemp(prefix='faxarray_')
-    else:
-        extract_dir = temp_dir
-        os.makedirs(extract_dir, exist_ok=True)
+        raise ValueError(
+            "temp_dir is required. Specify a directory for extracting tar contents, "
+            "e.g., temp_dir='/tmp/mydata' or temp_dir='./temp'"
+        )
+    
+    extract_dir = temp_dir
+    os.makedirs(extract_dir, exist_ok=True)
     
     try:
         # Open tar and filter members
@@ -616,14 +601,12 @@ def open_tar(
         if progress:
             print(f"  Reading {len(extracted_files)} FA files...")
         
-        # Read files sequentially
-        # Use lazy loading when chunks is requested
-        use_lazy = chunks is not None
+        # Read files sequentially with lazy loading
         datasets = []
         for i, filepath in enumerate(extracted_files):
             ds = _read_single_file(filepath, variables=variables,
                                    stack_levels=kwargs.get('stack_levels', True),
-                                   lazy=use_lazy)
+                                   lazy=True)  # Always lazy
             datasets.append(ds)
             if progress and (i + 1) % 5 == 0:
                 print(f"  Loaded {i + 1}/{len(extracted_files)} files...")
@@ -658,30 +641,17 @@ def open_tar(
         if progress:
             print(f"  Combined shape: {dict(combined.sizes)}")
         
-        # Apply chunking for lazy mode
-        if chunks:
-            combined = combined.chunk(chunks)
-            if progress:
-                print(f"  Applied chunking: {chunks}")
-            # Return wrapped dataset for cleanup on close
-            return TarDataset(combined, extract_dir, cleanup=True)
-        else:
-            # Eager mode: load data and allow cleanup
-            if progress:
-                print(f"  Loading data into memory...")
-            combined = combined.load()
-            
-            if temp_dir is None:  # Only cleanup auto-created temp dirs
-                shutil.rmtree(extract_dir, ignore_errors=True)
-                extract_dir = None
-            
-            if progress:
-                print(f"  Done!")
-            
-            return combined
+        # Always use lazy loading with chunking
+        combined = combined.chunk({'time': 1})
+        
+        if progress:
+            print(f"  Done!")
+        
+        # TarDataset for cleanup on close()
+        return TarDataset(combined, extract_dir, cleanup=True)
             
     except Exception:
-        # Cleanup on error if we created the temp dir
-        if temp_dir is None and 'extract_dir' in locals() and extract_dir:
+        # Cleanup on error
+        if 'extract_dir' in locals() and extract_dir and os.path.exists(extract_dir):
             shutil.rmtree(extract_dir, ignore_errors=True)
         raise
