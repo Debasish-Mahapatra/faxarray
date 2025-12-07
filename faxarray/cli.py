@@ -224,7 +224,7 @@ def main():
         prog='faxarray',
         description='Fast, user-friendly interface for Météo-France FA files'
     )
-    parser.add_argument('--version', action='version', version='faxarray 0.1.0')
+    parser.add_argument('--version', action='version', version='faxarray 0.2.1b')
     
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
     
