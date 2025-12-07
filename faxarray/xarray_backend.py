@@ -376,26 +376,60 @@ def open_mfdataset(
 
 
 def _append_to_netcdf(datasets: list, filepath: str, dim: str, progress: bool = False):
-    """Append datasets to NetCDF file (create if doesn't exist)."""
+    """
+    Append datasets to NetCDF file using netCDF4-python for memory efficiency.
+    
+    Uses true incremental write - never loads the existing file into memory.
+    """
     import os
+    import netCDF4 as nc
+    import numpy as np
     
     combined = xr.concat(datasets, dim=dim, data_vars='all')
     
     if os.path.exists(filepath):
-        # Append to existing file
+        # TRUE APPEND using netCDF4 directly (memory efficient)
         if progress:
             print(f"    Appending {len(datasets)} timesteps to {filepath}...")
         
-        # Load existing, concat, and overwrite (xarray doesn't support true append)
-        existing = xr.open_dataset(filepath)
-        merged = xr.concat([existing, combined], dim=dim, data_vars='all')
-        existing.close()
-        merged.to_netcdf(filepath, mode='w')
+        with nc.Dataset(filepath, mode='a') as ncfile:
+            # Get current time dimension size
+            time_var = ncfile.variables[dim]
+            current_len = len(time_var)
+            new_len = current_len + combined.sizes[dim]
+            
+            # Extend time coordinate
+            if dim in combined.coords:
+                time_values = combined[dim].values
+                # Handle numpy datetime64
+                if np.issubdtype(time_values.dtype, np.datetime64):
+                    # Convert to numeric (seconds since epoch)
+                    time_values = time_values.astype('datetime64[s]').astype('float64')
+                time_var[current_len:new_len] = time_values
+            
+            # Append each variable
+            for var_name in combined.data_vars:
+                if var_name in ncfile.variables:
+                    var = ncfile.variables[var_name]
+                    data = combined[var_name].values
+                    
+                    # Find which axis is the time dimension
+                    var_dims = var.dimensions
+                    if dim in var_dims:
+                        time_axis = var_dims.index(dim)
+                        # Build slice for appending along time axis
+                        slices = [slice(None)] * len(var_dims)
+                        slices[time_axis] = slice(current_len, new_len)
+                        var[tuple(slices)] = data
     else:
-        # Create new file
+        # Create new file with unlimited time dimension
         if progress:
             print(f"    Writing {len(datasets)} timesteps to {filepath}...")
-        combined.to_netcdf(filepath)
+        
+        # Use xarray to create initially, but set time as unlimited
+        combined.to_netcdf(filepath, unlimited_dims=[dim])
+
+
 
 
 
