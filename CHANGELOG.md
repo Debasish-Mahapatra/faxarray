@@ -18,6 +18,15 @@
 - `open_mfdataset()` now sorts files by forecast hour extracted from filename
 - `open_mfdataset()` produces N-1 timesteps from N files (first file is baseline)
 
+### Benchmark Results
+| Input Files | Output Timesteps | File Size |
+|------------|-----------------|-----------|
+| 2 files | 1 | 5.0 GB |
+| 6 files | 5 | 25 GB |
+| 11 files | 10 | 50 GB |
+
+~30s per file, ~5GB per timestep output.
+
 ### Technical Notes
 - De-accumulation verified against pure epygram (exact match)
 - Time dimension uses proper datetime values from FA metadata

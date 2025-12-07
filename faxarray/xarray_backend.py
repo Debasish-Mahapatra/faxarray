@@ -367,7 +367,7 @@ def open_mfdataset(
         if progress:
             print(f"Concatenating {len(result_datasets)} timesteps...")
         
-        combined = xr.concat(result_datasets, dim=concat_dim)
+        combined = xr.concat(result_datasets, dim=concat_dim, data_vars='all')
         
         if progress:
             print(f"Done! Shape: {dict(combined.sizes)}")
@@ -379,7 +379,7 @@ def _append_to_netcdf(datasets: list, filepath: str, dim: str, progress: bool = 
     """Append datasets to NetCDF file (create if doesn't exist)."""
     import os
     
-    combined = xr.concat(datasets, dim=dim)
+    combined = xr.concat(datasets, dim=dim, data_vars='all')
     
     if os.path.exists(filepath):
         # Append to existing file
@@ -388,7 +388,7 @@ def _append_to_netcdf(datasets: list, filepath: str, dim: str, progress: bool = 
         
         # Load existing, concat, and overwrite (xarray doesn't support true append)
         existing = xr.open_dataset(filepath)
-        merged = xr.concat([existing, combined], dim=dim)
+        merged = xr.concat([existing, combined], dim=dim, data_vars='all')
         existing.close()
         merged.to_netcdf(filepath, mode='w')
     else:
