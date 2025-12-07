@@ -196,8 +196,16 @@ def cmd_convert_multi(args):
         print(f"  Chunk size: {args.chunk_hours} hour(s)")
     
     try:
+        # Parse variables list
+        var_list = None
+        if args.variables:
+            var_list = []
+            for item in args.variables:
+                var_list.extend(item.split(','))
+        
         open_mfdataset(
             args.input,
+            variables=var_list,
             deaccumulate=deaccum_vars if deaccum_vars else None,
             chunk_hours=args.chunk_hours,
             output_file=args.output,
@@ -262,6 +270,8 @@ def main():
                               help='File with list of variables to de-accumulate (one per line)')
     multi_parser.add_argument('--chunk-hours', type=int, default=1,
                               help='Hours to hold in memory at once (default: 1)')
+    multi_parser.add_argument('-v', '--variables', nargs='*', default=[],
+                              help='Variables to include (default: all). Use for low memory.')
     multi_parser.add_argument('--quiet', '-q', action='store_true',
                               help='Quiet mode')
     

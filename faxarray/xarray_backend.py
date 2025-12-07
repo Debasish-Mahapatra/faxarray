@@ -212,6 +212,7 @@ def open_dataset(filename: str, **kwargs) -> xr.Dataset:
 def open_mfdataset(
     paths,
     concat_dim: str = 'time',
+    variables: list = None,
     deaccumulate: list = None,
     chunk_hours: int = 1,
     output_file: str = None,
@@ -304,8 +305,8 @@ def open_mfdataset(
             hour = extract_hour(filepath)
             print(f"  [{i+1}/{len(file_list)}] Loading +{hour:04d}...")
         
-        # Load current file
-        ds = open_dataset(filepath, **kwargs)
+        # Load current file (with optional variable filtering for memory efficiency)
+        ds = open_dataset(filepath, variables=variables, **kwargs)
         
         # Handle first file differently based on whether we're de-accumulating
         if i == 0:
@@ -423,10 +424,16 @@ def _append_to_netcdf(datasets: list, filepath: str, dim: str, progress: bool = 
             # Extend time coordinate
             if dim in combined.coords:
                 time_values = combined[dim].values
-                # Handle numpy datetime64
+                # Handle numpy datetime64 - convert to match file's time units
                 if np.issubdtype(time_values.dtype, np.datetime64):
-                    # Convert to numeric (seconds since epoch)
-                    time_values = time_values.astype('datetime64[s]').astype('float64')
+                    # Get the time units from the file
+                    time_units = getattr(time_var, 'units', 'hours since 1970-01-01')
+                    from cftime import date2num
+                    import pandas as pd
+                    # Convert numpy datetime64 to python datetime
+                    datetimes = pd.to_datetime(time_values).to_pydatetime()
+                    calendar = getattr(time_var, 'calendar', 'proleptic_gregorian')
+                    time_values = date2num(datetimes, time_units, calendar=calendar)
                 time_var[current_len:new_len] = time_values
             
             # Append each variable
