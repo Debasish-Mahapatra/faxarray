@@ -285,7 +285,7 @@ def open_mfdataset(
     
     file_list = sorted(file_list, key=extract_hour)
     
-    if len(file_list) < 2:
+    if deaccumulate and len(file_list) < 2:
         raise ValueError("Need at least 2 files for de-accumulation")
     
     if progress:
