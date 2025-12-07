@@ -526,8 +526,12 @@ def open_tar(
     """
     Open FA files from a tar archive.
     
-    Provides a memory-efficient way to explore data from FA archives using
-    lazy loading (Dask).
+    Extracts FA files to a temporary directory and reads them.
+    
+    Note: Dask lazy loading (via chunks parameter) is available but may
+    cause segfaults due to epygram's underlying C libraries not being
+    thread-safe. For production use, prefer eager loading with variables
+    parameter to limit memory usage.
     
     Parameters
     ----------
