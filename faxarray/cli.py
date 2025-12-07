@@ -127,6 +127,41 @@ def cmd_benchmark(args):
     fa.close()
 
 
+def fa2nc_main():
+    """Standalone FA to NetCDF converter (fa2nc command)."""
+    parser = argparse.ArgumentParser(
+        prog='fa2nc',
+        description='Convert FA files to NetCDF format'
+    )
+    parser.add_argument('input', help='Input FA file')
+    parser.add_argument('output', help='Output NetCDF file')
+    parser.add_argument('--compress', '-c', choices=['none', 'zlib'],
+                        default='none', help='Compression (default: none)')
+    parser.add_argument('--level', '-L', type=int, default=4,
+                        help='Compression level 1-9 (default: 4)')
+    parser.add_argument('--quiet', '-q', action='store_true',
+                        help='Quiet mode')
+    
+    args = parser.parse_args()
+    
+    try:
+        from .core import open_fa
+        fa = open_fa(args.input)
+        compress = args.compress if args.compress != 'none' else None
+        fa.to_netcdf(
+            args.output,
+            compress=compress,
+            compress_level=args.level,
+            progress=not args.quiet
+        )
+        fa.close()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    
+    return 0
+
+
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
