@@ -79,3 +79,6 @@ test/*.png
 # OS files
 .DS_Store
 Thumbs.db
+
+# Local planning docs (not for GitHub)
+docs/FUTURE_ENHANCEMENTS.md

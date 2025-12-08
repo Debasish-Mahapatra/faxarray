@@ -28,10 +28,14 @@ from .xarray_backend import (
     FABackendEntrypoint, open_dataset, open_mfdataset, open_tar, is_fa_file,
     TarDataset
 )
+from .fa_metadata import (
+    FA_METADATA, PREDEFINED_REGIONS,
+    get_metadata, apply_metadata_to_dataset
+)
 from . import xarray_accessor  # Register .fa accessor on xarray DataArrays
 
-__version__ = "0.2.1"
-__author__ = "Your Name"
+__version__ = "0.3.0"
+__author__ = "Debasish Mahapatra"
 
 __all__ = [
     # Main API
@@ -46,6 +50,12 @@ __all__ = [
     "TarDataset",
     "is_fa_file",
     "FABackendEntrypoint",
+    # Metadata
+    "FA_METADATA",
+    "PREDEFINED_REGIONS",
+    "get_metadata",
+    "apply_metadata_to_dataset",
     # Version
     "__version__",
 ]
+

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "faxarray"
-version = "0.2.2"
+version = "0.3.0"
 description = "Fast, user-friendly interface for Météo-France FA files with xarray-like API"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -45,9 +45,9 @@ faxarray = "faxarray.cli:main"
 fa2nc = "faxarray.cli:fa2nc_main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/faxarray"
-Documentation = "https://github.com/yourusername/faxarray#readme"
-Repository = "https://github.com/yourusername/faxarray"
+Homepage = "https://github.com/Debasish-Mahapatra/faxarray"
+Documentation = "https://github.com/Debasish-Mahapatra/faxarray#readme"
+Repository = "https://github.com/Debasish-Mahapatra/faxarray"
 
 # Register as xarray backend engine
 [project.entry-points."xarray.backends"]

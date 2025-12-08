@@ -158,8 +158,13 @@ class FABackendEntrypoint(BackendEntrypoint):
             }
         
         # Set coordinates attribute on each variable for CF compliance
+        # Also apply field-specific metadata (long_name, units, standard_name)
+        from .fa_metadata import apply_metadata_to_dataset
+        ds = apply_metadata_to_dataset(ds)
+        
         for var_name in ds.data_vars:
-            ds[var_name].attrs['coordinates'] = 'lat lon'
+            if 'coordinates' not in ds[var_name].attrs:
+                ds[var_name].attrs['coordinates'] = 'lat lon'
         
         return ds
     
