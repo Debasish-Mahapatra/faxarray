@@ -15,16 +15,11 @@
   - Predefined regions: `france`, `alps`, `pyrenees`, `britain`, `iberia`, `italy`, `germany`, `benelux`, `scandinavia`, `mediterranean`
   - Or custom bounds: `lon_range=(-5, 10), lat_range=(41, 52)`
 
-- **`ds['var'].fa.animate(dim='time')`**: Create animations over any dimension
-  - Returns matplotlib FuncAnimation object
-  - Save with `.save('output.gif', writer='pillow')`
 
 #### New xarray Accessor Methods (Dataset)
 
-- **`ds.fa.wind_speed(u_var, v_var)`**: Compute wind speed from U/V components
-- **`ds.fa.wind_direction(u_var, v_var)`**: Compute wind direction (meteorological convention)
-- **`ds.fa.plot_wind(u_var, v_var)`**: Plot wind vectors as quiver or barbs
 - **`ds.fa.extract_domain(region=...)`**: Extract subdomain for entire dataset
+
 
 #### CF-Compliant Metadata
 
