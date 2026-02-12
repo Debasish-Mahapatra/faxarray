@@ -34,7 +34,7 @@ from .fa_metadata import (
 )
 from . import xarray_accessor  # Register .fa accessor on xarray DataArrays
 
-__version__ = "0.3.0"
+__version__ = "0.2.3"
 __author__ = "Debasish Mahapatra"
 
 __all__ = [

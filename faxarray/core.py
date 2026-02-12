@@ -101,13 +101,24 @@ def detect_3d_fields(field_names: List[str]) -> Dict[str, Dict]:
     # Process model level groups
     for base_name, levels in model_groups.items():
         if len(levels) > 1:  # Only consider as 3D if more than 1 level
-            # Sort by level number (ascending: 1, 2, 3... where 1 = top)
-            sorted_levels = sorted(levels, key=lambda x: x[0])
+            # IMPORTANT: Reverse the native FA file orientation for more intuitive indexing
+            # 
+            # Native FA file convention:
+            #   - S001 = model top (highest altitude)
+            #   - S087 = surface (lowest altitude, for 87-level model)
+            #
+            # Faxarray stacking convention (REVERSED from native):
+            #   - Index 0 = surface (S087, highest level number)
+            #   - Index 86 = model top (S001, lowest level number)
+            #
+            # This makes the array indexing more intuitive: increasing index = increasing altitude
+            # Sort DESCENDING by level number (87, 86, 85, ..., 3, 2, 1)
+            sorted_levels = sorted(levels, key=lambda x: x[0], reverse=True)
             result[base_name] = {
                 'levels': sorted_levels,
                 'type': 'model',
                 'units': '1',
-                'positive': 'down',  # Level 1 at top, increases downward
+                'positive': 'up',  # Array index increases upward from surface to model top
             }
     
     # Process pressure level groups
@@ -595,12 +606,16 @@ class FADataset:
                 
                 # Store coordinate info for this level type
                 if dim_name not in level_coords:
+                    # Use sequential indices (0, 1, 2, ..., n-1) for the coordinate
+                    # This makes sel(level=0) select the surface, sel(level=n-1) select model top
+                    # The original FA level numbers are preserved in variable attributes
                     level_coords[dim_name] = {
-                        'values': np.array(level_nums, dtype=np.int32),
+                        'values': np.arange(len(level_nums), dtype=np.int32),
                         'attrs': {
-                            'long_name': 'model level' if level_type == 'model' else 'pressure',
-                            'units': level_units,
+                            'long_name': 'model level index' if level_type == 'model' else 'pressure level index',
+                            'units': '1',
                             'positive': level_positive,
+                            'description': 'Sequential level index: 0=surface, {}=model top'.format(len(level_nums)-1) if level_type == 'model' else 'Pressure level index',
                         }
                     }
                 
