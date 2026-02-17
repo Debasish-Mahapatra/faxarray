@@ -169,6 +169,27 @@ def get_surface_fields(field_names: List[str]) -> List[str]:
     return surface
 
 
+def _enable_lonlat_nearest_sel(ds: xr.Dataset) -> xr.Dataset:
+    """
+    Enable nearest-neighbor .sel(lon=..., lat=...) on datasets with 2D lon/lat.
+
+    This uses xarray's NDPointIndex when available. On older xarray versions
+    (or if index creation fails), the dataset is returned unchanged.
+    """
+    if 'lon' not in ds.coords or 'lat' not in ds.coords:
+        return ds
+
+    index_mod = getattr(xr, 'indexes', None)
+    index_cls = getattr(index_mod, 'NDPointIndex', None) if index_mod is not None else None
+    if index_cls is None or not hasattr(ds, 'set_xindex'):
+        return ds
+
+    try:
+        return ds.set_xindex(('lon', 'lat'), index_cls)
+    except Exception:
+        return ds
+
+
 class FAVariable:
     """
     A single variable from an FA file.
@@ -696,7 +717,7 @@ class FADataset:
             if lead_time is not None:
                 ds.attrs['lead_time'] = str(lead_time)
         
-        return ds
+        return _enable_lonlat_nearest_sel(ds)
     
     def to_xarray_lazy(self, 
                        variables: Optional[List[str]] = None,
@@ -853,7 +874,7 @@ class FADataset:
                 'standard_name': 'time',
             }
             
-        return ds
+        return _enable_lonlat_nearest_sel(ds)
     
     def to_netcdf(self,
                   output: str,
