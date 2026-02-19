@@ -534,6 +534,73 @@ class FADataset:
                 progress=progress
             )
             self._loaded_all = True
+
+    def _resolve_requested_fields(self, variables: List[str]) -> List[str]:
+        """
+        Resolve user-requested variable names to FA field names.
+
+        Accepts:
+        - Raw FA names (e.g., S001WIND.U.PHYS, SURFPREC.EAU.CON)
+        - Normalized names with dots replaced by underscores
+          (e.g., SURFPREC_EAU_CON)
+        - Stacked 3D base names shown in xarray output
+          (e.g., WIND_U_PHYS, WIND.U.PHYS)
+
+        Returns
+        -------
+        list of str
+            Resolved FA field names to read from file.
+        """
+        available_fields = list(self.variables)
+        if not variables:
+            return available_fields
+
+        alias_to_fields: Dict[str, List[str]] = {}
+
+        def add_alias(alias: str, fields: List[str]):
+            if alias not in alias_to_fields:
+                alias_to_fields[alias] = []
+            for field in fields:
+                if field not in alias_to_fields[alias]:
+                    alias_to_fields[alias].append(field)
+
+        # Aliases for raw fields (with and without dot normalization)
+        for field in available_fields:
+            add_alias(field, [field])
+            add_alias(field.replace('.', '_'), [field])
+
+        # Aliases for stacked 3D base names (e.g., WIND_U_PHYS)
+        level_groups = detect_3d_fields(available_fields)
+        for base_name, group_info in level_groups.items():
+            group_fields = [name for _, name in group_info['levels']]
+            add_alias(base_name, group_fields)
+            add_alias(base_name.replace('.', '_'), group_fields)
+
+        resolved: List[str] = []
+        missing: List[str] = []
+
+        for requested in variables:
+            matches = alias_to_fields.get(requested)
+
+            # Fallbacks for mixed input forms
+            if not matches and '_' in requested:
+                matches = alias_to_fields.get(requested.replace('_', '.'))
+            if not matches and '.' in requested:
+                matches = alias_to_fields.get(requested.replace('.', '_'))
+
+            if not matches:
+                missing.append(requested)
+                continue
+
+            for field in matches:
+                if field not in resolved:
+                    resolved.append(field)
+
+        if missing:
+            missing_str = ', '.join(missing)
+            raise KeyError(f"Variable(s) not found in FA file: {missing_str}")
+
+        return resolved
     
     def to_xarray(self, 
                   variables: Optional[List[str]] = None,
@@ -565,8 +632,8 @@ class FADataset:
             self.load(progress=progress)
             all_fields = list(self._cache.keys())
         else:
-            all_fields = variables
-            for name in variables:
+            all_fields = self._resolve_requested_fields(variables)
+            for name in all_fields:
                 if name not in self._cache:
                     self._cache[name] = self._reader.read_field(name)
         
@@ -744,9 +811,7 @@ class FADataset:
             raise ImportError("Dask is required for lazy loading")
             
         # Get list of variables without loading data
-        all_fields = list(self.variables)
-        if variables:
-            all_fields = [v for v in all_fields if v in variables]
+        all_fields = self._resolve_requested_fields(variables) if variables else list(self.variables)
         
         # Get shape from geometry
         shape = self.shape
