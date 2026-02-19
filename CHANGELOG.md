@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.4] - 2026-02-19
+
+### Fixed
+
+- xarray backend `variables=[...]` now accepts stacked/normalized variable names shown in dataset output (e.g., `WIND_U_PHYS`), not only raw FA field names.
+
+---
+
 ## [0.2.3] - 2026-02-12
 
 ### Added
@@ -35,7 +43,7 @@
 
 ### Changed
 
-- Version bumped to 0.3.0
+- Version bumped to 0.2.3
 - `__init__.py` exports new metadata functions and constants
 
 ---
