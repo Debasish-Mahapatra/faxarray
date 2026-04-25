@@ -67,8 +67,6 @@ class LegacyGribMFCodec:
             raise FAGribMFError(f"legacy GRIB_MF only handles KNGRIB=1/2, got {kngr}")
         if kngr != 2:
             raise FAGribMFError("pure Python legacy GRIB_MF encoding currently supports KNGRIB=2")
-        if spectral:
-            raise FAGribMFError("pure Python legacy GRIB_MF spectral encoding is not implemented yet")
 
         idecal = _legacy_payload_offset(kngr, spectral)
         message = _parse_message(_words_to_payload_bytes(words[idecal:]))
