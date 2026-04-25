@@ -2,12 +2,13 @@
 
 **User-friendly interface for Météo-France FA files with xarray integration**
 
-A Python package that wraps EPyGrAM with a clean, xarray-like API for handling FA files. Provides easy plotting, tar archive support, and NetCDF conversion.
+A Python package with a clean, xarray-like API for handling FA files. Provides easy plotting, tar archive support, and NetCDF conversion.
 
 ## Features
 
 - Easy plotting with `.plot()` methods (like xarray)
 - Native xarray backend - use `xr.open_dataset()` directly on FA files
+- Native FA/LFI reader for uncompressed fields, legacy packed fields, and ALADIN/LAM spectral-to-gridpoint conversion, without a required EPyGRAM install
 - Tar archive support - open FA files directly from `.tar.gz` archives
 - Multi-file conversion - combine multiple FA files into one NetCDF
 - Simple API - no complex initialization required
@@ -96,6 +97,7 @@ faxarray convert-multi 'pf*+*' output.nc \
 | Function | Description |
 |----------|-------------|
 | `fx.open_fa(path)` | Open single FA file |
+| `fx.write_fa(ds, output, template)` | Write data into a new FA file using a template |
 | `fx.open_tar(tarpath, temp_dir)` | Open FA files from tar archive |
 | `fx.open_mfdataset(pattern, ...)` | Combine multiple FA files |
 | `xr.open_dataset(path)` | xarray backend (auto-registered) |
@@ -123,8 +125,15 @@ faxarray convert-multi 'pf*+*' output.nc \
 
 - Python 3.11
 - numpy, xarray, netCDF4, matplotlib
-- [epygram](https://github.com/UMR-CNRM/EPyGrAM) (v2.0.7+, auto-installed)
 - h5py, cartopy
+- gfortran for legacy packed FA fields
+- system ecCodes for GRIB_API-packed FA fields
+
+Legacy KNGRIB=1/2 packed FA fields are decoded and template-written through the
+vendored rootpack GRIB_MF routines. ALADIN/LAM spectral fields are decoded to
+their native spectral coefficients and converted to gridpoint arrays by the
+native backend. Global reduced-Gauss spectral transforms and GRIB_API-packed
+spectral fields remain unsupported.
 
 ## License
 

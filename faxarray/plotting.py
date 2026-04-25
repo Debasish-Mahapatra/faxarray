@@ -96,6 +96,12 @@ class PlotAccessor:
         
         return fig, ax
 
+    def _add_colorbar(self, fig: plt.Figure, ax: plt.Axes, mappable: Any, label: str):
+        """Add a compact colorbar to the plot."""
+        cbar = fig.colorbar(mappable, ax=ax, shrink=0.85, pad=0.02)
+        cbar.set_label(label)
+        return cbar
+
     def pcolormesh(self,
                    ax: Optional[plt.Axes] = None,
                    figsize: Optional[Tuple[int, int]] = None,

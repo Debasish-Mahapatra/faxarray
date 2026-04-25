@@ -1,13 +1,10 @@
-"""
-FA file reader using EPyGrAM backend.
-
-This module wraps EPyGrAM's falfilfa4py for reading FA files,
-providing a cleaner interface for the rest of the package.
-"""
+"""FA file reader using the native faxarray backend."""
 
 import numpy as np
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+
+from .backends.native_fa import NativeFAResource
 
 
 @dataclass
@@ -39,11 +36,10 @@ class FAFieldInfo:
 
 class FAReader:
     """
-    Low-level FA file reader using EPyGrAM backend.
+    Low-level FA file reader using faxarray's native backend.
     
-    This class handles the actual reading of FA files using EPyGrAM's
-    Fortran-based reader (falfilfa4py). It provides a clean interface
-    for extracting field data and metadata.
+    This class provides a clean interface for extracting field data and
+    metadata. It no longer requires EPyGRAM at import or install time.
     
     Parameters
     ----------
@@ -64,23 +60,11 @@ class FAReader:
         self._geometry: Optional[FAGeometry] = None
         self._fields: Optional[List[str]] = None
         self._field_info: Dict[str, FAFieldInfo] = {}
-        self._epygram_initialized = False
-        
-        # Initialize EPyGrAM and open file
         self._open()
-    
-    def _init_epygram(self):
-        """Initialize EPyGrAM environment (only once)."""
-        if not self._epygram_initialized:
-            import epygram
-            epygram.init_env()
-            self._epygram_initialized = True
     
     def _open(self):
         """Open the FA file."""
-        self._init_epygram()
-        import epygram
-        self._resource = epygram.formats.resource(self.filepath, 'r')
+        self._resource = NativeFAResource(self.filepath)
     
     def close(self):
         """Close the FA file."""
@@ -110,47 +94,15 @@ class FAReader:
         return self._geometry
     
     def _load_geometry(self) -> FAGeometry:
-        """Load geometry from the first valid field."""
-        # Find a surface field to get geometry
-        for fname in self.fields:
-            if fname.startswith('SURF') or not fname.startswith('S0'):
-                try:
-                    f = self._resource.readfield(fname)
-                    data = f.getdata()
-                    if data.ndim == 2:
-                        lons, lats = f.geometry.get_lonlat_grid()
-                        proj_info = None
-                        if hasattr(f.geometry, 'projection'):
-                            proj_info = dict(f.geometry.projection)
-                        return FAGeometry(
-                            name=f.geometry.name,
-                            shape=data.shape,
-                            lons=lons,
-                            lats=lats,
-                            projection=proj_info
-                        )
-                except:
-                    continue
-        
-        # Fallback: try any field
-        for fname in self.fields[:10]:
-            try:
-                f = self._resource.readfield(fname)
-                if hasattr(f, 'spectral') and f.spectral:
-                    f.sp2gp()
-                data = f.getdata()
-                if data.ndim == 2:
-                    lons, lats = f.geometry.get_lonlat_grid()
-                    return FAGeometry(
-                        name=f.geometry.name,
-                        shape=data.shape,
-                        lons=lons,
-                        lats=lats
-                    )
-            except:
-                continue
-        
-        raise RuntimeError("Could not determine geometry from file")
+        """Load geometry from the FA header."""
+        geometry = self._resource.geometry
+        return FAGeometry(
+            name=geometry.name,
+            shape=geometry.shape,
+            lons=geometry.lons,
+            lats=geometry.lats,
+            projection=geometry.projection,
+        )
     
     def get_field_info(self, name: str) -> FAFieldInfo:
         """Get metadata about a field without loading data."""
@@ -159,9 +111,9 @@ class FAReader:
                 encoding = self._resource.fieldencoding(name)
                 self._field_info[name] = FAFieldInfo(
                     name=name,
-                    spectral=encoding.get('spectral', False)
+                    spectral=bool(encoding.get('spectral', False))
                 )
-            except:
+            except Exception:
                 self._field_info[name] = FAFieldInfo(name=name)
         return self._field_info[name]
     
@@ -176,31 +128,7 @@ class FAReader:
             - base_time: datetime, the initialization/reference time
             - lead_time: timedelta, the forecast lead time
         """
-        import numpy as np
-        
-        # Read any field to get validity info
-        for fname in self.fields[:10]:
-            try:
-                field = self._resource.readfield(fname)
-                if hasattr(field, 'validity'):
-                    valid_time = field.validity.get()
-                    base_time = field.validity.getbasis()
-                    lead_time = field.validity.term()
-                    
-                    return {
-                        'valid_time': np.datetime64(valid_time),
-                        'base_time': np.datetime64(base_time),
-                        'lead_time': np.timedelta64(lead_time),
-                    }
-            except:
-                continue
-        
-        # Fallback: no validity info available
-        return {
-            'valid_time': None,
-            'base_time': None,
-            'lead_time': None,
-        }
+        return self._resource.get_validity()
     
     def read_field(self, name: str, convert_spectral: bool = True) -> np.ndarray:
         """
@@ -218,12 +146,7 @@ class FAReader:
         np.ndarray
             Field data as numpy array
         """
-        f = self._resource.readfield(name)
-        
-        if convert_spectral and hasattr(f, 'spectral') and f.spectral:
-            f.sp2gp()
-        
-        return f.getdata()
+        return self._resource.readfield(name, convert_spectral=convert_spectral)
     
     def read_fields(self, names: List[str], 
                     convert_spectral: bool = True,

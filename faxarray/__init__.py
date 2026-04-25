@@ -22,7 +22,7 @@ Example usage:
     >>> ds = fx.open_dataset('pfABOFABOF+0001')
 """
 
-from .core import FADataset, FAVariable, open_fa
+from .core import FADataset, FAVariable, open_fa, write_fa
 from .reader import FAReader
 from .xarray_backend import (
     FABackendEntrypoint, open_dataset, open_mfdataset, open_tar, is_fa_file,
@@ -40,6 +40,7 @@ __author__ = "Debasish Mahapatra"
 __all__ = [
     # Main API
     "open_fa",
+    "write_fa",
     "FADataset", 
     "FAVariable",
     "FAReader",

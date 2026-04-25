@@ -21,19 +21,20 @@ try:
 except ImportError:
     HAS_DASK = False
 
-# Global lock for EPyGrAM access (not thread-safe)
-EPYGRAM_LOCK = threading.Lock()
+# Global lock for FA access. Some native and optional compiled FA routines keep
+# process-level state, so lazy reads are serialized.
+FA_BACKEND_LOCK = threading.Lock()
 
 def read_field_delayed(filepath: str, field_name: str):
     """
     Read a field lazily using dask.delayed.
-    Crucially, uses a lock to prevent concurrent EPyGrAM access.
+    Crucially, uses a lock to prevent concurrent FA backend access.
     """
     if not HAS_DASK:
         raise ImportError("Dask is required for lazy loading")
         
     def _read_with_lock(path, name):
-        with EPYGRAM_LOCK:
+        with FA_BACKEND_LOCK:
             # Create a FRESH reader for each access to avoid state issues
             reader = FAReader(path)
             try:
@@ -1007,6 +1008,23 @@ class FADataset:
         if progress:
             elapsed = time.time() - start
             print(f"  Done in {elapsed:.1f}s")
+
+    def to_fa(
+        self,
+        output: str,
+        variables: Optional[List[str]] = None,
+        overwrite: bool = False,
+    ):
+        """
+        Write selected data to a new FA file using this file as template.
+
+        The native writer replaces fields in a copy of the template. It supports
+        uncompressed gridpoint fields and legacy KNGRIB=1/2 packed gridpoint
+        fields. Spectral fields can be read and converted to gridpoint arrays,
+        but template writing spectral fields is not implemented yet.
+        """
+        ds = self.to_xarray(variables=variables, stack_levels=True, progress=False)
+        write_fa(ds, output, template=self.filepath, variables=None, overwrite=overwrite)
     
     def info(self) -> str:
         """Return summary information about the dataset."""
@@ -1042,6 +1060,9 @@ class FADatasetSubset:
     def to_netcdf(self, output: str, **kwargs):
         self._parent.to_netcdf(output, variables=self._variables, **kwargs)
 
+    def to_fa(self, output: str, overwrite: bool = False):
+        self._parent.to_fa(output, variables=self._variables, overwrite=overwrite)
+
 
 def open_fa(filepath: str) -> FADataset:
     """
@@ -1068,3 +1089,32 @@ def open_fa(filepath: str) -> FADataset:
     >>> temp.plot()
     """
     return FADataset(filepath)
+
+
+def write_fa(
+    ds: xr.Dataset,
+    output: str,
+    template: str,
+    variables: Optional[List[str]] = None,
+    overwrite: bool = False,
+):
+    """
+    Write an xarray Dataset to FA using an existing FA file as template.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Dataset containing variables to write.
+    output : str
+        Output FA path.
+    template : str
+        Existing FA file that supplies geometry, validity, field names, and
+        article layout.
+    variables : list of str, optional
+        Dataset variables to write. If omitted, writes all data variables.
+    overwrite : bool
+        If True, replace an existing output file.
+    """
+    from .backends.native_fa import write_fa as native_write_fa
+
+    native_write_fa(ds, output, template=template, variables=variables, overwrite=overwrite)

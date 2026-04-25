@@ -30,12 +30,12 @@ dependencies = [
     "xarray>=2022.0",
     "netCDF4>=1.5",
     "matplotlib>=3.5",
-    "epygram @ git+https://github.com/UMR-CNRM/EPyGrAM.git@2.0.7",
     "h5py",
     "cartopy>=0.20",
 ]
 
 [project.optional-dependencies]
+epygram = ["epygram @ git+https://github.com/UMR-CNRM/EPyGrAM.git@2.0.7"]
 plotting = ["cartopy>=0.20"]
 all = ["cartopy>=0.20"]
 dev = ["pytest>=7.0", "pytest-cov"]
@@ -56,3 +56,16 @@ faxarray = "faxarray.xarray_backend:FABackendEntrypoint"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["faxarray*"]
+
+[tool.setuptools.package-data]
+faxarray = [
+    "_vendor/ifsaux/README.md",
+    "_vendor/ifsaux/fa/*",
+    "_vendor/ifsaux/grib_mf/*",
+    "_vendor/ifsaux/lfi/*",
+    "_vendor/ifsaux/lfi_alt/*",
+    "_vendor/ifsaux/module/*",
+    "_vendor/ifsaux/include/*",
+    "_vendor/ifsaux/shim/*",
+    "_vendor/ifsaux/support/*",
+]
