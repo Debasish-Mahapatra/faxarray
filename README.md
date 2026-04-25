@@ -157,6 +157,14 @@ spectral fields use a NumPy Legendre+FFT reference path; for bit-identical
 agreement with EPYGRAM/`ectrans` use the production `ectrans4py` pipeline on
 Linux.
 
+### Future Native FA Work
+
+- Legacy `KNGRIB=1/2` bitmap block support. Current ALARO and EPYGRAM sample
+  files exercise simple BDS packing only; bitmap fixtures are still needed.
+- Legacy GRIB_MF complex BDS support for old spectral packing variants with
+  `KCPACK`, `KSCALP`, and explicit packed-data start offsets. This needs real
+  sample files or synthetic fixtures validated against the model routines.
+
 ### What still requires EPYGRAM / ECTRANS
 
 - Bit-identical spectral transforms for global ARPEGE fields. The native
