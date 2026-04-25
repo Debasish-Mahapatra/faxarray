@@ -62,7 +62,43 @@ class LegacyGribMFCodec:
     ) -> np.ndarray:
         """Encode values back into a legacy packed FA article layout."""
 
-        raise FAGribMFError("pure Python legacy GRIB_MF encoding is not implemented yet")
+        kngr = int(words[0])
+        if kngr not in (1, 2):
+            raise FAGribMFError(f"legacy GRIB_MF only handles KNGRIB=1/2, got {kngr}")
+        if kngr != 2:
+            raise FAGribMFError("pure Python legacy GRIB_MF encoding currently supports KNGRIB=2")
+        if spectral:
+            raise FAGribMFError("pure Python legacy GRIB_MF spectral encoding is not implemented yet")
+
+        idecal = _legacy_payload_offset(kngr, spectral)
+        message = _parse_message(_words_to_payload_bytes(words[idecal:]))
+        flat_values = np.asarray(values, dtype=np.float64).ravel()
+        if message.data_count != flat_values.size:
+            raise FAGribMFError(
+                f"legacy GRIB_MF template expects {message.data_count} values, "
+                f"got {flat_values.size}"
+            )
+
+        pmin, pmax, packed = _encode_arpege_values(flat_values, message.bits_per_value)
+        payload = bytearray(message.payload)
+        payload[message.bds_offset + 4 : message.bds_offset + 6] = b"\x00\x00"
+        payload[message.bds_offset + 6 : message.bds_offset + 10] = b"\x00\x00\x00\x00"
+        payload[message.bds_offset + 10] = message.bits_per_value
+        data_bytes = _pack_unsigned(
+            packed,
+            message.bits_per_value,
+            message.bds_length - 11,
+        )
+        payload[message.data_offset : message.bds_offset + message.bds_length] = data_bytes
+        payload[message.bds_offset + message.bds_length :] = (
+            b"\x00" * (len(payload) - message.bds_offset - message.bds_length)
+        )
+
+        replacement = np.array(words, dtype=np.int64, copy=True)
+        replacement[idecal - 2] = _word_from_float(pmin)
+        replacement[idecal - 1] = _word_from_float(pmax)
+        replacement[idecal:] = _payload_bytes_to_words(payload, replacement.size - idecal)
+        return replacement
 
 
 _CODEC: LegacyGribMFCodec | None = None
@@ -173,6 +209,21 @@ def _unpack_unsigned(data: bytes, width: int, count: int) -> np.ndarray:
     return bit_rows @ weights
 
 
+def _pack_unsigned(values: np.ndarray, width: int, output_bytes: int) -> bytes:
+    values = np.asarray(values, dtype=np.uint64).ravel()
+    total_bits = int(values.size) * int(width)
+    if output_bytes * 8 < total_bits:
+        raise FAGribMFError("legacy GRIB_MF output buffer is too small")
+
+    bit_rows = (
+        values[:, None]
+        >> np.arange(width - 1, -1, -1, dtype=np.uint64)
+    ) & np.uint64(1)
+    bits = np.zeros(output_bytes * 8, dtype=np.uint8)
+    bits[:total_bits] = bit_rows.astype(np.uint8, copy=False).reshape(-1)
+    return np.packbits(bits, bitorder="big").tobytes()
+
+
 def _decode_arpege_values(
     packed: np.ndarray,
     bits_per_value: int,
@@ -194,6 +245,36 @@ def _decode_arpege_values(
     return values
 
 
+def _encode_arpege_values(
+    values: np.ndarray,
+    bits_per_value: int,
+) -> tuple[float, float, np.ndarray]:
+    if values.size == 0:
+        raise FAGribMFError("legacy GRIB_MF cannot encode an empty field")
+    if not np.isfinite(values).all():
+        raise FAGribMFError("legacy GRIB_MF cannot encode NaN or infinite values")
+
+    pmin = float(np.min(values))
+    pmax = float(np.max(values))
+    max_code = (1 << bits_per_value) - 1
+    if max_code <= 0:
+        raise FAGribMFError(f"invalid legacy GRIB_MF bits per value: {bits_per_value}")
+
+    span = pmax - pmin
+    if span <= 1.0e-290:
+        same_sign_value = min(abs(pmin), abs(pmax))
+        if same_sign_value <= 1.0e-290:
+            same_sign_value = 0.0
+        pmax = math.copysign(same_sign_value, pmax)
+        pmin = pmax
+        return pmin, pmax, np.zeros(values.size, dtype=np.uint64)
+
+    scale = float(max_code) / span
+    packed = np.floor((values - pmin) * scale + 0.5)
+    packed = np.clip(packed, 0, max_code).astype(np.uint64)
+    return pmin, pmax, packed
+
+
 def _decode_signed_scale(raw: int) -> int:
     if raw <= 2**15:
         return int(raw)
@@ -208,6 +289,24 @@ def _decode_grib_float(exponent: int, mantissa: int) -> float:
 
 def _float_from_word(word: int) -> float:
     return np.array([np.int64(word)], dtype=np.int64).view(np.float64)[0].item()
+
+
+def _word_from_float(value: float) -> np.int64:
+    return np.array([np.float64(value)], dtype=np.float64).view(np.int64)[0]
+
+
+def _payload_bytes_to_words(payload: bytes | bytearray, word_count: int) -> np.ndarray:
+    expected = word_count * 8
+    if len(payload) > expected:
+        raise FAGribMFError("legacy GRIB_MF encoded payload is larger than the template")
+    padded = bytes(payload) + b"\x00" * (expected - len(payload))
+    return np.array(
+        [
+            int.from_bytes(padded[index : index + 8], "big", signed=True)
+            for index in range(0, expected, 8)
+        ],
+        dtype=np.int64,
+    )
 
 
 def _read_u16(data: bytes, offset: int) -> int:
