@@ -8,7 +8,26 @@ A Python package with a clean, xarray-like API for handling FA files. Provides e
 
 - Easy plotting with `.plot()` methods (like xarray)
 - Native xarray backend - use `xr.open_dataset()` directly on FA files
-- Native FA/LFI reader for uncompressed fields, legacy packed fields, and ALADIN/LAM spectral-to-gridpoint conversion, without a required EPyGRAM install
+- Native FA/LFI reader without a required EPyGRAM install:
+  - LAM/regular lon-lat geometries and global reduced/rotated/stretched
+    Gauss geometries (ARPEGE C2.4-style)
+  - Uncompressed, legacy `KNGRIB=1/2` packed and `KNGRIB>=100` GRIB_API
+    packed gridpoint fields
+  - ALADIN/LAM bi-Fourier spectral-to-gridpoint conversion
+  - Reference-implementation global ARPEGE Legendre + FFT
+    spectral-to-gridpoint conversion
+  - Misc / header-like article reading (`FULLPOS`, `Const.Clim.Surfa`, ...)
+  - Typed metadata accessors: `validity`, `vertical`, `geometry`,
+    `metadata_summary()`, and per-field `fieldencoding_object()`
+- Native FA writing on top of an existing template:
+  - Raw float32/float64 gridpoint fields
+  - Legacy `KNGRIB=1/2` gridpoint *and* spectral fields (with the FA
+    Laplacian repack)
+  - `KNGRIB>=100` GRIB_API gridpoint *and* spectral fields via system
+    ecCodes
+- Native FA file creation from scratch (no template):
+  - Regular lon/lat (LAM) and global reduced/rotated/stretched Gauss
+    geometries via `fx.create_fa_file()` or `fx.create_fa_from_dataset()`
 - Tar archive support - open FA files directly from `.tar.gz` archives
 - Multi-file conversion - combine multiple FA files into one NetCDF
 - Simple API - no complex initialization required
@@ -98,6 +117,8 @@ faxarray convert-multi 'pf*+*' output.nc \
 |----------|-------------|
 | `fx.open_fa(path)` | Open single FA file |
 | `fx.write_fa(ds, output, template)` | Write data into a new FA file using a template |
+| `fx.create_fa_file(output, geometry, fields, ...)` | Create a brand-new FA file from native data |
+| `fx.create_fa_from_dataset(ds, output, ...)` | Create a brand-new FA file from an `xarray.Dataset` |
 | `fx.open_tar(tarpath, temp_dir)` | Open FA files from tar archive |
 | `fx.open_mfdataset(pattern, ...)` | Combine multiple FA files |
 | `xr.open_dataset(path)` | xarray backend (auto-registered) |
@@ -129,11 +150,21 @@ faxarray convert-multi 'pf*+*' output.nc \
 - gfortran for legacy packed FA fields
 - system ecCodes for GRIB_API-packed FA fields
 
-Legacy KNGRIB=1/2 packed FA fields are decoded and template-written through the
-vendored rootpack GRIB_MF routines. ALADIN/LAM spectral fields are decoded to
-their native spectral coefficients and converted to gridpoint arrays by the
-native backend. Global reduced-Gauss spectral transforms and GRIB_API-packed
-spectral fields remain unsupported.
+Legacy `KNGRIB=1/2` packed FA fields are decoded and template-written through
+the vendored rootpack GRIB_MF routines. ALADIN/LAM spectral fields use a
+NumPy bi-Fourier transform that round-trips exactly. Global ARPEGE spectral
+fields use a NumPy Legendre+FFT reference path; for bit-identical agreement
+with EPYGRAM/`ectrans` use the production `ectrans4py` pipeline on Linux.
+
+### What still requires EPYGRAM / ECTRANS
+
+- Bit-identical spectral transforms for global ARPEGE fields. The native
+  reference NumPy path is documented, useful for spot-checks and
+  visualisation, but not a replacement for `ectrans4py` numerical parity.
+- Creating *projected LAM* FA files (Lambert / Mercator / polar
+  stereographic) from scratch — only regular lon/lat LAM and global
+  Gauss are wired in `create_fa_file()` so far. For projected LAM use
+  `write_fa()` with an existing template.
 
 ## License
 

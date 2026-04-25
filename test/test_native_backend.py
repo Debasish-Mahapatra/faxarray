@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(not SAMPLE.exists(), reason="EPyGRAM sample FA f
 def test_native_backend_lists_fields_and_reads_geometry():
     resource = NativeFAResource(str(SAMPLE))
 
-    assert resource.listfields() == ["SURFIND.TERREMER", "SURFGEOPOTENTIEL"]
+    assert resource.list_h2d_fields() == ["SURFIND.TERREMER", "SURFGEOPOTENTIEL"]
     assert resource.geometry.name == "regular_lonlat"
     assert resource.geometry.shape == (601, 801)
     assert np.isclose(resource.geometry.lons.min(), -8.0)

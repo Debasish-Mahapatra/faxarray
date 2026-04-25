@@ -729,17 +729,17 @@ class FADataset:
             'lat': (['y', 'x'], self.lat),
             'lon': (['y', 'x'], self.lon)
         }
-        
+
         # Add level coordinates from what we detected
         for dim_name, coord_info in level_coords.items():
             coords[dim_name] = coord_info['values']
-        
+
         # Get time validity info
         validity = self._reader.get_validity()
         valid_time = validity['valid_time']
         base_time = validity['base_time']
         lead_time = validity['lead_time']
-        
+
         # Create dataset (without time dim yet)
         ds = xr.Dataset(
             data_vars,
@@ -749,7 +749,11 @@ class FADataset:
                 'Conventions': 'CF-1.8',
             }
         )
-        
+
+        # Attach per-field catalog metadata (long_name, units, ...).
+        from .fa_metadata import apply_metadata_to_dataset
+        ds = apply_metadata_to_dataset(ds)
+
         # Add CF-compliant attributes to level coordinates
         for dim_name, coord_info in level_coords.items():
             if dim_name in ds.coords:
@@ -1118,3 +1122,121 @@ def write_fa(
     from .backends.native_fa import write_fa as native_write_fa
 
     native_write_fa(ds, output, template=template, variables=variables, overwrite=overwrite)
+
+
+def create_fa_from_dataset(
+    ds: xr.Dataset,
+    output: str,
+    geometry: Optional[object] = None,
+    validity: Optional[object] = None,
+    vertical: Optional[object] = None,
+    variables: Optional[List[str]] = None,
+    overwrite: bool = False,
+) -> None:
+    """Create a brand-new FA file from an xarray Dataset (no template).
+
+    This is the no-template counterpart to :func:`write_fa`. The
+    ``geometry`` argument selects which header articles get written.
+
+    Parameters
+    ----------
+    ds : xarray.Dataset
+        Source dataset. Each selected variable must be 2D (regular
+        lon/lat) or 1D (global Gauss flat array). Singleton ``time``
+        dimensions are squeezed.
+    output : str
+        Path of the FA file to create.
+    geometry : FARegularLonLatGeometry or FAGlobalGaussGeometry
+        Required. Use :class:`faxarray.FARegularLonLatGeometry` or
+        :class:`faxarray.FAGlobalGaussGeometry`. If omitted, a regular
+        lon/lat geometry is inferred from ``ds.lon`` / ``ds.lat`` and
+        the dataset's ``y, x`` dimensions.
+    validity : FAValidityInput, optional
+        Validity to encode. Defaults to a placeholder analysis date.
+    vertical : FAVerticalInput, optional
+        Hybrid vertical coordinate (defaults to a single layer).
+    variables : list of str, optional
+        Subset of ``ds`` variables to write. If omitted, writes all data
+        variables (excluding coordinate-like ones).
+    overwrite : bool
+        If True, overwrite an existing output file.
+    """
+
+    from pathlib import Path
+    from .backends import (
+        FAFieldData,
+        FARegularLonLatGeometry,
+        FAGlobalGaussGeometry,
+        FAValidityInput,
+        FAVerticalInput,
+        create_fa_file,
+    )
+
+    output_path = Path(output)
+    if output_path.exists():
+        if not overwrite:
+            raise FileExistsError(f"Output already exists: {output}")
+        output_path.unlink()
+
+    selected = list(variables) if variables else list(ds.data_vars)
+
+    if geometry is None:
+        geometry = _infer_regular_lonlat_geometry(ds)
+
+    fields: List[FAFieldData] = []
+    for name in selected:
+        if name not in ds:
+            raise KeyError(f"variable not found in dataset: {name}")
+        array = ds[name]
+        # Drop the singleton time dim that to_xarray() typically adds.
+        if "time" in array.dims and array.sizes["time"] == 1:
+            array = array.isel(time=0)
+        values = np.asarray(array.values)
+        # If user kept dots replaced by underscores in xarray names, restore them.
+        fa_name = name if "." in name else name.replace("_", ".")
+        if "." in name:
+            fa_name = name
+        fields.append(FAFieldData(name=fa_name, values=values))
+
+    create_fa_file(
+        str(output_path),
+        geometry=geometry,
+        fields=fields,
+        validity=validity,
+        vertical=vertical,
+    )
+
+
+def _infer_regular_lonlat_geometry(ds: xr.Dataset):
+    """Best-effort inference of FARegularLonLatGeometry from a Dataset."""
+
+    from .backends import FARegularLonLatGeometry
+
+    if "lon" not in ds.coords or "lat" not in ds.coords:
+        raise ValueError(
+            "create_fa_from_dataset() needs an explicit `geometry=` when "
+            "the dataset has no `lon`/`lat` coordinates"
+        )
+    lon = np.asarray(ds["lon"].values)
+    lat = np.asarray(ds["lat"].values)
+    if lon.ndim != 2 or lat.ndim != 2 or lon.shape != lat.shape:
+        raise ValueError(
+            "regular lon/lat inference expects 2D `lon` and `lat` of equal shape"
+        )
+    ny, nx = lon.shape
+    dx_row = np.diff(lon[0])
+    dy_col = np.diff(lat[:, 0])
+    if dx_row.size == 0 or dy_col.size == 0:
+        raise ValueError("cannot infer dx/dy from a degenerate lon/lat grid")
+    if not np.allclose(dx_row, dx_row[0], atol=1e-6) or not np.allclose(dy_col, dy_col[0], atol=1e-6):
+        raise ValueError(
+            "lon/lat grid is not regular; pass an explicit geometry= argument"
+        )
+    return FARegularLonLatGeometry(
+        nx=nx,
+        ny=ny,
+        lon0=float(lon[ny // 2, nx // 2]),
+        lat0=float(lat[ny // 2, nx // 2]),
+        dx=float(dx_row[0]),
+        dy=float(dy_col[0]),
+    )

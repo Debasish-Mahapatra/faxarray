@@ -186,11 +186,23 @@ class LFIFile:
             fh.seek(article.offset_bytes)
             fh.write(data)
 
-    def list_fa_fields(self) -> List[str]:
-        """Return FA field articles, excluding the seven FA header articles."""
+    def list_fa_fields(self, include_misc: bool = False) -> List[str]:
+        """Return FA field article names.
 
-        return [
-            article.name
-            for index, article in enumerate(self.articles)
-            if index >= 7 and article.name != "DATX-DES-DONNEES"
-        ]
+        By default the seven well-known FA header articles
+        (``CADRE-*``, ``DATE-DES-DONNEES``, ``DATX-DES-DONNEES``) are
+        excluded. Set ``include_misc=True`` to keep every non-header
+        article in file order, including FULLPOS-style markers and any
+        other Misc payload that lives next to the data fields.
+        """
+
+        skip = {
+            "CADRE-DIMENSIONS",
+            "CADRE-FRANKSCHMI",
+            "CADRE-REDPOINPOL",
+            "CADRE-SINLATITUD",
+            "CADRE-FOCOHYBRID",
+            "DATE-DES-DONNEES",
+            "DATX-DES-DONNEES",
+        }
+        return [a.name for a in self.articles if a.name not in skip]

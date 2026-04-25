@@ -17,7 +17,7 @@ def test_real_file_lists_geometry_and_encodings():
 
     assert resource.geometry.name == "mercator"
     assert resource.geometry.shape == (480, 480)
-    assert len(resource.listfields()) == 3383
+    assert len(resource.list_h2d_fields()) == 3383
     assert resource.fieldencoding("SURFTEMPERATURE")["spectral"] is False
     assert resource.fieldencoding("S001TEMPERATURE")["spectral"] is True
 

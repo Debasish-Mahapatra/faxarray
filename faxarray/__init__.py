@@ -22,7 +22,7 @@ Example usage:
     >>> ds = fx.open_dataset('pfABOFABOF+0001')
 """
 
-from .core import FADataset, FAVariable, open_fa, write_fa
+from .core import FADataset, FAVariable, create_fa_from_dataset, open_fa, write_fa
 from .reader import FAReader
 from .xarray_backend import (
     FABackendEntrypoint, open_dataset, open_mfdataset, open_tar, is_fa_file,
@@ -32,16 +32,24 @@ from .fa_metadata import (
     FA_METADATA, PREDEFINED_REGIONS,
     get_metadata, apply_metadata_to_dataset
 )
+from .backends import (
+    FAFieldData,
+    FAGlobalGaussGeometry,
+    FARegularLonLatGeometry,
+    FAValidityInput,
+    FAVerticalInput,
+    create_fa_file,
+)
 from . import xarray_accessor  # Register .fa accessor on xarray DataArrays
 
-__version__ = "0.2.4"
+__version__ = "0.4.0"
 __author__ = "Debasish Mahapatra"
 
 __all__ = [
     # Main API
     "open_fa",
     "write_fa",
-    "FADataset", 
+    "FADataset",
     "FAVariable",
     "FAReader",
     # xarray integration
@@ -51,6 +59,14 @@ __all__ = [
     "TarDataset",
     "is_fa_file",
     "FABackendEntrypoint",
+    # FA creation from scratch
+    "create_fa_file",
+    "create_fa_from_dataset",
+    "FAFieldData",
+    "FARegularLonLatGeometry",
+    "FAGlobalGaussGeometry",
+    "FAValidityInput",
+    "FAVerticalInput",
     # Metadata
     "FA_METADATA",
     "PREDEFINED_REGIONS",
