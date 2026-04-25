@@ -65,8 +65,8 @@ class LegacyGribMFCodec:
         kngr = int(words[0])
         if kngr not in (1, 2):
             raise FAGribMFError(f"legacy GRIB_MF only handles KNGRIB=1/2, got {kngr}")
-        if kngr != 2:
-            raise FAGribMFError("pure Python legacy GRIB_MF encoding currently supports KNGRIB=2")
+        if kngr == 1 and spectral:
+            raise FAGribMFError("pure Python legacy GRIB_MF KNGRIB=1 spectral encoding is not implemented yet")
 
         idecal = _legacy_payload_offset(kngr, spectral)
         message = _parse_message(_words_to_payload_bytes(words[idecal:]))
@@ -77,10 +77,21 @@ class LegacyGribMFCodec:
                 f"got {flat_values.size}"
             )
 
-        pmin, pmax, packed = _encode_arpege_values(flat_values, message.bits_per_value)
+        if kngr == 2:
+            pmin, pmax, packed = _encode_arpege_values(flat_values, message.bits_per_value)
+            scale_bytes = b"\x00\x00"
+            reference_bytes = b"\x00\x00\x00\x00"
+        else:
+            binary_scale, exponent, mantissa, packed = _encode_standard_values(
+                flat_values,
+                message.bits_per_value,
+            )
+            scale_bytes = _encode_signed_scale(binary_scale).to_bytes(2, "big")
+            reference_bytes = bytes([exponent]) + mantissa.to_bytes(3, "big")
+
         payload = bytearray(message.payload)
-        payload[message.bds_offset + 4 : message.bds_offset + 6] = b"\x00\x00"
-        payload[message.bds_offset + 6 : message.bds_offset + 10] = b"\x00\x00\x00\x00"
+        payload[message.bds_offset + 4 : message.bds_offset + 6] = scale_bytes
+        payload[message.bds_offset + 6 : message.bds_offset + 10] = reference_bytes
         payload[message.bds_offset + 10] = message.bits_per_value
         data_bytes = _pack_unsigned(
             packed,
@@ -93,8 +104,9 @@ class LegacyGribMFCodec:
         )
 
         replacement = np.array(words, dtype=np.int64, copy=True)
-        replacement[idecal - 2] = _word_from_float(pmin)
-        replacement[idecal - 1] = _word_from_float(pmax)
+        if kngr == 2:
+            replacement[idecal - 2] = _word_from_float(pmin)
+            replacement[idecal - 1] = _word_from_float(pmax)
         replacement[idecal:] = _payload_bytes_to_words(payload, replacement.size - idecal)
         return replacement
 
@@ -271,6 +283,67 @@ def _encode_arpege_values(
     packed = np.floor((values - pmin) * scale + 0.5)
     packed = np.clip(packed, 0, max_code).astype(np.uint64)
     return pmin, pmax, packed
+
+
+def _encode_standard_values(
+    values: np.ndarray,
+    bits_per_value: int,
+) -> tuple[int, int, int, np.ndarray]:
+    if values.size == 0:
+        raise FAGribMFError("legacy GRIB_MF cannot encode an empty field")
+    if not np.isfinite(values).all():
+        raise FAGribMFError("legacy GRIB_MF cannot encode NaN or infinite values")
+
+    pmin = float(np.min(values))
+    pmax = float(np.max(values))
+    exponent, mantissa, reference = _encode_grib_float_floor(pmin)
+
+    scale_input = (pmax - reference) / float((1 << (bits_per_value + 1)) - 1)
+    if scale_input > 0.0:
+        binary_scale = math.floor(math.log(scale_input, 2.0) + 2.0)
+    else:
+        binary_scale = 0
+    binary_scale = max(-99, min(99, int(binary_scale)))
+
+    packing_scale = 2.0 ** (-binary_scale)
+    max_code = (1 << bits_per_value) - 1
+    packed = np.floor((values - reference) * packing_scale + 0.5)
+    packed = np.clip(packed, 0, max_code).astype(np.uint64)
+    return binary_scale, exponent, mantissa, packed
+
+
+def _encode_grib_float_floor(value: float) -> tuple[int, int, float]:
+    positive = value >= 0.0
+    absolute = abs(value)
+    if absolute == 0.0:
+        exponent = 0
+    else:
+        exponent = int(math.log(absolute, 16.0) + 65.0 + 1.0e-12)
+        exponent = max(0, min(127, exponent))
+
+    while True:
+        mantissa_float = absolute / (16.0 ** (exponent - 70))
+        if positive:
+            mantissa = int(mantissa_float)
+        else:
+            mantissa = int(math.ceil(mantissa_float))
+        if mantissa < 2**24 or exponent >= 127:
+            break
+        exponent += 1
+
+    if mantissa >= 2**24:
+        mantissa = 2**24 - 1
+
+    represented = float(mantissa) * (16.0 ** (exponent - 70))
+    if positive:
+        return exponent, mantissa, represented
+    return exponent + 128, mantissa, -represented
+
+
+def _encode_signed_scale(scale: int) -> int:
+    if scale >= 0:
+        return int(scale)
+    return int(2**15 - scale)
 
 
 def _decode_signed_scale(raw: int) -> int:
