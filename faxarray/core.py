@@ -1023,9 +1023,9 @@ class FADataset:
         Write selected data to a new FA file using this file as template.
 
         The native writer replaces fields in a copy of the template. It supports
-        uncompressed gridpoint fields and legacy KNGRIB=1/2 packed gridpoint
-        fields. Spectral fields can be read and converted to gridpoint arrays,
-        but template writing spectral fields is not implemented yet.
+        raw, legacy KNGRIB=1/2, and GRIB_API gridpoint fields. LAM spectral
+        fields can be written from gridpoint data or coefficient arrays. Global
+        spectral template writes require coefficient arrays.
         """
         ds = self.to_xarray(variables=variables, stack_levels=True, progress=False)
         write_fa(ds, output, template=self.filepath, variables=None, overwrite=overwrite)

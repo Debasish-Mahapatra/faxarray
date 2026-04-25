@@ -1424,7 +1424,7 @@ def create_fa_from_scratch(
     :class:`fa_writer.FAFieldData` to describe the inputs.
 
     Projected LAM geometries (Lambert/Mercator/polar stereographic) raise
-    ``NotImplementedError`` — for those, copy an existing template via
+    ``NotImplementedError``. For those, copy an existing template via
     :func:`write_fa` instead.
     """
 

@@ -8,7 +8,7 @@ top-level :func:`create_fa_file` helper:
 * **global reduced Gauss**: optionally rotated/stretched (KTYPTR=1 or 2)
 
 For projected LAM geometries (Lambert / Mercator / polar stereographic)
-``create_fa_file`` raises ``NotImplementedError`` — the projection
+``create_fa_file`` raises ``NotImplementedError``. The projection
 parameter encoding inside ``CADRE-SINLATITUD`` for those cases is more
 involved than the public API needs today, so users should keep using
 ``write_fa()`` with an existing template for those.

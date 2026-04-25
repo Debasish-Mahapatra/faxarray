@@ -162,7 +162,7 @@ with EPYGRAM/`ectrans` use the production `ectrans4py` pipeline on Linux.
   reference NumPy path is documented, useful for spot-checks and
   visualisation, but not a replacement for `ectrans4py` numerical parity.
 - Creating *projected LAM* FA files (Lambert / Mercator / polar
-  stereographic) from scratch — only regular lon/lat LAM and global
+  stereographic) from scratch. Only regular lon/lat LAM and global
   Gauss are wired in `create_fa_file()` so far. For projected LAM use
   `write_fa()` with an existing template.
 

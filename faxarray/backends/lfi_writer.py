@@ -147,8 +147,8 @@ class LFIWriter:
         header_words = [
             self.page_words,        # ilpar (word 0)
             _ART_NAME_LEN,          # ilmna (1)
-            0,                      # ifeam (2) — clean close
-            22,                     # illdo (3) — header struct length
+            0,                      # ifeam (2), clean close
+            22,                     # illdo (3), header struct length
             total_pages,            # inaph (4)
             n_articles,             # inalo (5)
             ilnal,                  # ilnal (6)
@@ -199,7 +199,7 @@ class LFIWriter:
                     names[slot * _ART_NAME_LEN : (slot + 1) * _ART_NAME_LEN] = _END_INDEX
                     cursor += 1
                 else:
-                    # Extra slots get the end marker too — the reader stops at
+                    # Extra slots get the end marker too. The reader stops at
                     # the first end marker but tolerates trailing ones.
                     names[slot * _ART_NAME_LEN : (slot + 1) * _ART_NAME_LEN] = _END_INDEX
             index_blobs.append(bytes(names))

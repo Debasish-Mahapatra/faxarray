@@ -7,7 +7,7 @@
 #### Native FA file creation (no template required)
 
 - New :func:`faxarray.create_fa_file` builds a brand-new FA file from
-  Python data — no existing template needed. Supported geometries:
+  Python data, with no existing template needed. Supported geometries:
   - **Regular lon/lat (LAM)** via
     :class:`faxarray.FARegularLonLatGeometry`.
   - **Global reduced Gauss**, including the rotated/stretched (C2.4)
@@ -107,12 +107,10 @@
 
 ### Documented
 
-- `create_fa_from_scratch()` is exposed as a deliberate
-  `NotImplementedError` stub: building an entirely new FA file
-  (allocating LFI articles + writing all header articles for an
-  arbitrary geometry/validity) is still out of scope and remains the
-  recommended use case for EPYGRAM. The template-replacement writer
-  (`write_fa()`) covers most realistic editing flows.
+- `create_fa_from_scratch()` now delegates to `create_fa_file()` for regular
+  lon/lat and global Gauss geometries. Projected LAM creation from arbitrary
+  projection parameters remains out of scope; use `write_fa()` with an
+  existing template for that case.
 
 ### Changed
 
