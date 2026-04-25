@@ -1,7 +1,6 @@
 """Minimal native reader for pure LFI containers.
 
-The implementation follows the rootpack ``ifsaux/lfi_alt/lfi_alts.c`` layout:
-an LFI file is an indexed container of 8-byte words. FA files store their
+An LFI file is an indexed container of 8-byte words. FA files store their
 header records and field records as LFI articles.
 """
 

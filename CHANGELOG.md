@@ -32,6 +32,13 @@
   in addition to the existing gridpoint-shape input. This avoids a
   redundant gp→sp transform when the caller already has coefficients.
 
+#### Legacy packed FA codec
+
+- Legacy ``KNGRIB=1/2`` simple packed payloads are now decoded and
+  template-written with a pure Python/NumPy codec. This removes the
+  runtime need for rootpack/ifsaux sources, a Fortran compiler, or a
+  compiled GRIB_MF helper library.
+
 #### Per-field rich metadata
 
 - New :class:`faxarray.backends.NativeFAFieldDescriptor` and
@@ -53,8 +60,7 @@
   :func:`create_fa_from_scratch`. The function now performs creation
   for the supported geometry families and rejects only unrecognised
   geometry input types.
-- Bundled rootpack/ifsaux model sources. Legacy ``KNGRIB=1/2`` packing now
-  builds only from a user-supplied local source path or prebuilt codec library.
+- Bundled rootpack/ifsaux model sources and the external GRIB_MF build path.
 
 ---
 
