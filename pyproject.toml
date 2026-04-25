@@ -56,16 +56,3 @@ faxarray = "faxarray.xarray_backend:FABackendEntrypoint"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["faxarray*"]
-
-[tool.setuptools.package-data]
-faxarray = [
-    "_vendor/ifsaux/README.md",
-    "_vendor/ifsaux/fa/*",
-    "_vendor/ifsaux/grib_mf/*",
-    "_vendor/ifsaux/lfi/*",
-    "_vendor/ifsaux/lfi_alt/*",
-    "_vendor/ifsaux/module/*",
-    "_vendor/ifsaux/include/*",
-    "_vendor/ifsaux/shim/*",
-    "_vendor/ifsaux/support/*",
-]

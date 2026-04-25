@@ -1,4 +1,4 @@
-"""ctypes bridge to the vendored legacy FA GRIB_MF codec."""
+"""ctypes bridge to the optional legacy FA GRIB_MF codec."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ import shutil
 import shlex
 import subprocess
 import sys
+import tarfile
 from typing import Iterable, List
 
 import numpy as np
@@ -164,23 +165,30 @@ def _legacy_payload_offset(kngr: int, spectral: bool) -> int:
 
 
 def _ensure_library() -> Path:
-    lib_path = _library_cache_path()
+    override = os.environ.get("FAXARRAY_GRIB_MF_LIBRARY")
+    if override:
+        lib_path = Path(override).expanduser()
+        if not lib_path.exists():
+            raise FAGribMFError(f"FAXARRAY_GRIB_MF_LIBRARY does not exist: {lib_path}")
+        return lib_path
+
+    sources = _fortran_sources()
+    lib_path = _library_cache_path(sources)
     if lib_path.exists():
         return lib_path
 
     compiler = shlex.split(os.environ.get("FC", "gfortran"))
     if not compiler or shutil.which(compiler[0]) is None:
         raise FAGribMFError(
-            "legacy packed FA fields need gfortran to build the vendored GRIB_MF codec"
+            "legacy packed FA fields need gfortran to build the GRIB_MF codec"
         )
 
     lib_path.parent.mkdir(parents=True, exist_ok=True)
-    _build_library(compiler, lib_path)
+    _build_library(compiler, lib_path, sources)
     return lib_path
 
 
-def _build_library(compiler: List[str], lib_path: Path) -> None:
-    sources = _fortran_sources()
+def _build_library(compiler: List[str], lib_path: Path, sources: List[Path]) -> None:
     objects = [source.with_suffix(".o").name for source in sources]
     compile_cmd = [
         *compiler,
@@ -214,20 +222,28 @@ def _build_library(compiler: List[str], lib_path: Path) -> None:
 
 
 def _fortran_sources() -> List[Path]:
-    root = Path(__file__).resolve().parents[1] / "_vendor" / "ifsaux"
-    return [
+    root = _external_ifsaux_root()
+    shim_root = _ensure_shim_sources()
+    sources = [
         root / "module" / "parkind1.F90",
         root / "module" / "lfi_precision.F90",
-        root / "shim" / "yomhook_stub.F90",
-        root / "shim" / "sdl_mod_stub.F90",
-        root / "shim" / "oml_mod_stub.F90",
-        *sorted((root / "grib_mf").glob("*.F")),
-        root / "shim" / "fa_grib_mf_codec.F90",
+        shim_root / "yomhook_stub.F90",
+        shim_root / "sdl_mod_stub.F90",
+        shim_root / "oml_mod_stub.F90",
+        *[root / "grib_mf" / name for name in _GRIB_MF_SOURCES],
+        shim_root / "fa_grib_mf_codec.F90",
     ]
+    missing = [str(source) for source in sources if not source.exists()]
+    if missing:
+        raise FAGribMFError(
+            "ifsaux source path is missing files needed for legacy FA packing:\n"
+            + "\n".join(missing)
+        )
+    return sources
 
 
-def _library_cache_path() -> Path:
-    digest = _source_digest(_fortran_sources())
+def _library_cache_path(sources: Iterable[Path]) -> Path:
+    digest = _source_digest(sources)
     return _cache_root() / "fa_grib_mf" / digest / _library_name()
 
 
@@ -269,3 +285,281 @@ def _endian_flags() -> List[str]:
     if sys.byteorder == "little":
         return ["-DLITTLE"]
     return []
+
+
+_GRIB_MF_SOURCES = [
+    "codega.F",
+    "confi.F",
+    "confp_mf.F",
+    "decfp_mf.F",
+    "decoga.F",
+    "gbyte_mf.F",
+    "gbytes_mf.F",
+    "gsbite_mf.F",
+    "gsbyte_mf.F",
+    "mxmn_mf.F",
+    "offset_mf.F",
+    "packgb.F",
+    "prtbin_mf.F",
+    "sbyte_mf.F",
+    "sbytes_mf.F",
+    "unpagb.F",
+]
+
+_MODULE_SOURCES = ["parkind1.F90", "lfi_precision.F90"]
+
+_SHIM_SOURCES = {
+    "yomhook_stub.F90": """MODULE YOMHOOK
+USE PARKIND1, ONLY : JPRB
+IMPLICIT NONE
+LOGICAL :: LHOOK = .FALSE.
+CONTAINS
+SUBROUTINE DR_HOOK(name, flag, handle)
+CHARACTER(LEN=*), INTENT(IN) :: name
+INTEGER, INTENT(IN) :: flag
+REAL(KIND=JPRB), INTENT(INOUT) :: handle
+handle = 0.0_JPRB
+END SUBROUTINE DR_HOOK
+END MODULE YOMHOOK
+""",
+    "sdl_mod_stub.F90": """MODULE SDL_MOD
+IMPLICIT NONE
+CONTAINS
+SUBROUTINE SDL_SRLABORT()
+ERROR STOP 'SDL_SRLABORT called from faxarray FA legacy codec'
+END SUBROUTINE SDL_SRLABORT
+END MODULE SDL_MOD
+""",
+    "oml_mod_stub.F90": """MODULE OML_MOD
+IMPLICIT NONE
+CONTAINS
+INTEGER FUNCTION OML_MY_THREAD()
+OML_MY_THREAD = 1
+END FUNCTION OML_MY_THREAD
+INTEGER FUNCTION OML_GET_NUM_THREADS()
+OML_GET_NUM_THREADS = 1
+END FUNCTION OML_GET_NUM_THREADS
+END MODULE OML_MOD
+""",
+    "fa_grib_mf_codec.F90": """SUBROUTINE faxarray_fa_decode_legacy(kgrib, kleng, klenf, knbit, pmin_bits, pmax_bits, ldarpe, values, kerr, kjlenf, kbits, kword) BIND(C)
+  USE ISO_C_BINDING, ONLY : c_bool, c_double, c_int, c_int64_t
+  USE LFI_PRECISION
+  IMPLICIT NONE
+  INTEGER(c_int), VALUE :: kleng, klenf, knbit
+  INTEGER(c_int64_t), INTENT(IN) :: kgrib(kleng)
+  INTEGER(c_int64_t), VALUE :: pmin_bits, pmax_bits
+  LOGICAL(c_bool), VALUE :: ldarpe
+  REAL(c_double), INTENT(OUT) :: values(klenf)
+  INTEGER(c_int), INTENT(OUT) :: kerr, kjlenf, kbits, kword
+
+  INTEGER(KIND=JPLIKM) :: ib1par(19), ib2par(17)
+  INTEGER(KIND=JPLIKM) :: ibits, icpack, ierr, ijlenf, ijlenv
+  INTEGER(KIND=JPLIKM) :: ilenf, ileng, inbit, iscalp, iword
+  INTEGER(KIND=JPLIKB), ALLOCATABLE :: igrib(:)
+  LOGICAL :: ldarpe_f
+  REAL(KIND=JPDBLD) :: zmax, zmin
+  REAL(KIND=JPDBLD) :: zvalues(klenf), zvert(64)
+
+  ileng = kleng
+  ilenf = klenf
+  inbit = knbit
+  ALLOCATE(igrib(ileng))
+  igrib = INT(kgrib, JPLIKB)
+  zmin = TRANSFER(pmin_bits, zmin)
+  zmax = TRANSFER(pmax_bits, zmax)
+  ldarpe_f = LOGICAL(ldarpe)
+  zvalues = 0.0_JPDBLD
+  zvert = 0.0_JPDBLD
+
+  CALL DECOGA(zvalues, ilenf, ibits, inbit, ib1par, ib2par, zvert, SIZE(zvert), &
+       igrib, ileng, iword, ijlenv, ijlenf, icpack, iscalp, ierr, zmin, zmax, ldarpe_f)
+
+  values = REAL(zvalues, c_double)
+  kerr = ierr
+  kjlenf = ijlenf
+  kbits = ibits
+  kword = iword
+  DEALLOCATE(igrib)
+END SUBROUTINE faxarray_fa_decode_legacy
+
+SUBROUTINE faxarray_fa_encode_legacy(template_kgrib, template_kleng, values, klenf, knbit, kbits, ldarpe, out_kgrib, out_kleng, kword, kerr, pmin_bits, pmax_bits) BIND(C)
+  USE ISO_C_BINDING, ONLY : c_bool, c_double, c_int, c_int64_t
+  USE LFI_PRECISION
+  IMPLICIT NONE
+  INTEGER(c_int), VALUE :: template_kleng, klenf, knbit, kbits, out_kleng
+  INTEGER(c_int64_t), INTENT(IN) :: template_kgrib(template_kleng)
+  REAL(c_double), INTENT(IN) :: values(klenf)
+  LOGICAL(c_bool), VALUE :: ldarpe
+  INTEGER(c_int64_t), INTENT(OUT) :: out_kgrib(out_kleng)
+  INTEGER(c_int), INTENT(OUT) :: kword, kerr
+  INTEGER(c_int64_t), INTENT(OUT) :: pmin_bits, pmax_bits
+
+  INTEGER(KIND=JPLIKM) :: ib1par(19), ib2par(17)
+  INTEGER(KIND=JPLIKM) :: ibits, icpack, ierr, ijlenf, ijlenv
+  INTEGER(KIND=JPLIKM) :: ilenf, inbit, iout_leng, iscalp, itemplate_leng, iword
+  INTEGER(KIND=JPLIKB), ALLOCATABLE :: igrib_out(:), igrib_template(:)
+  LOGICAL :: ldarpe_f
+  REAL(KIND=JPDBLD) :: zmax, zmin
+  REAL(KIND=JPDBLD) :: ztmp(1), zvalues(klenf), zvert(64)
+
+  itemplate_leng = template_kleng
+  iout_leng = out_kleng
+  ilenf = klenf
+  inbit = knbit
+  ibits = kbits
+  ALLOCATE(igrib_template(itemplate_leng))
+  ALLOCATE(igrib_out(iout_leng))
+  igrib_template = INT(template_kgrib, JPLIKB)
+  igrib_out = 0_JPLIKB
+  ldarpe_f = LOGICAL(ldarpe)
+  ztmp = 0.0_JPDBLD
+  zvert = 0.0_JPDBLD
+  zmin = 0.0_JPDBLD
+  zmax = 0.0_JPDBLD
+
+  CALL DECOGA(ztmp, 1, ibits, inbit, ib1par, ib2par, zvert, SIZE(zvert), &
+       igrib_template, itemplate_leng, iword, ijlenv, ijlenf, icpack, iscalp, ierr, &
+       zmin, zmax, ldarpe_f)
+
+  IF (ierr /= 0) THEN
+    kerr = ierr
+    kword = 0
+    out_kgrib = 0_c_int64_t
+    pmin_bits = 0_c_int64_t
+    pmax_bits = 0_c_int64_t
+    DEALLOCATE(igrib_template, igrib_out)
+    RETURN
+  ENDIF
+
+  zvalues = REAL(values, JPDBLD)
+  zmin = 0.0_JPDBLD
+  zmax = 0.0_JPDBLD
+
+  CALL CODEGA(zvalues, ilenf, ibits, inbit, ib1par, ib2par, zvert, MAX(ijlenv, 2), &
+       igrib_out, iout_leng, iword, 0, 0, 0, ierr, zmin, zmax, ldarpe_f)
+
+  out_kgrib = INT(igrib_out, c_int64_t)
+  kword = iword
+  kerr = ierr
+  pmin_bits = TRANSFER(zmin, pmin_bits)
+  pmax_bits = TRANSFER(zmax, pmax_bits)
+  DEALLOCATE(igrib_template, igrib_out)
+END SUBROUTINE faxarray_fa_encode_legacy
+""",
+}
+
+
+def _external_ifsaux_root() -> Path:
+    direct = os.environ.get("FAXARRAY_IFSAUX_ROOT")
+    if direct:
+        path = Path(direct).expanduser()
+        if path.is_file():
+            return _extract_ifsaux_from_tarball(path)
+        return _normalise_ifsaux_root(path)
+
+    tarball = os.environ.get("FAXARRAY_ROOTPACK_TARBALL")
+    if tarball:
+        return _extract_ifsaux_from_tarball(Path(tarball).expanduser())
+
+    raise FAGribMFError(
+        "faxarray does not ship rootpack or ifsaux model sources. "
+        "Legacy KNGRIB=1/2 packed FA fields need an external source copy. "
+        "Set FAXARRAY_IFSAUX_ROOT to an ifsaux source directory or unpacked "
+        "rootpack tree, set FAXARRAY_ROOTPACK_TARBALL to a rootpack tarball, "
+        "or set FAXARRAY_GRIB_MF_LIBRARY to a prebuilt compatible codec library."
+    )
+
+
+def _normalise_ifsaux_root(path: Path) -> Path:
+    path = path.resolve()
+    if _looks_like_ifsaux(path):
+        return path
+
+    direct = path / "src" / "local" / "ifsaux"
+    if _looks_like_ifsaux(direct):
+        return direct
+
+    matches = [candidate for candidate in path.glob("*/src/local/ifsaux") if _looks_like_ifsaux(candidate)]
+    if matches:
+        return matches[0].resolve()
+
+    raise FAGribMFError(
+        f"could not find ifsaux sources under {path}. Expected grib_mf/ and module/ "
+        "directories, or a rootpack tree containing */src/local/ifsaux."
+    )
+
+
+def _looks_like_ifsaux(path: Path) -> bool:
+    return (path / "grib_mf").is_dir() and (path / "module").is_dir()
+
+
+def _extract_ifsaux_from_tarball(tarball: Path) -> Path:
+    tarball = tarball.resolve()
+    if not tarball.exists():
+        raise FAGribMFError(f"rootpack tarball does not exist: {tarball}")
+
+    stat = tarball.stat()
+    digest = hashlib.sha256(
+        f"{tarball}:{stat.st_size}:{stat.st_mtime_ns}".encode("utf-8")
+    ).hexdigest()[:16]
+    dest = _cache_root() / "external_ifsaux" / digest / "ifsaux"
+    if _required_source_files_exist(dest):
+        return dest
+
+    tmp = dest.parent / "ifsaux.tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True, exist_ok=True)
+
+    needed = {
+        ("module", name): tmp / "module" / name for name in _MODULE_SOURCES
+    }
+    needed.update({
+        ("grib_mf", name): tmp / "grib_mf" / name for name in _GRIB_MF_SOURCES
+    })
+
+    with tarfile.open(tarball) as archive:
+        for member in archive.getmembers():
+            if not member.isfile():
+                continue
+            parts = member.name.split("/")
+            key = None
+            for index, part in enumerate(parts[:-2]):
+                if part == "ifsaux":
+                    candidate = (parts[index + 1], parts[index + 2])
+                    if candidate in needed:
+                        key = candidate
+                    break
+            if key is None:
+                continue
+            target = needed[key]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            source = archive.extractfile(member)
+            if source is None:
+                continue
+            target.write_bytes(source.read())
+
+    if not _required_source_files_exist(tmp):
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise FAGribMFError(
+            f"rootpack tarball does not contain the required ifsaux GRIB_MF sources: {tarball}"
+        )
+
+    shutil.rmtree(dest, ignore_errors=True)
+    tmp.rename(dest)
+    return dest
+
+
+def _required_source_files_exist(root: Path) -> bool:
+    required = [root / "module" / name for name in _MODULE_SOURCES]
+    required.extend(root / "grib_mf" / name for name in _GRIB_MF_SOURCES)
+    return all(path.exists() for path in required)
+
+
+def _ensure_shim_sources() -> Path:
+    root = _cache_root() / "fa_grib_mf_shims" / "v1"
+    root.mkdir(parents=True, exist_ok=True)
+    for name, content in _SHIM_SOURCES.items():
+        path = root / name
+        if not path.exists() or path.read_text() != content:
+            path.write_text(content)
+    return root

@@ -147,14 +147,18 @@ faxarray convert-multi 'pf*+*' output.nc \
 - Python 3.11
 - numpy, xarray, netCDF4, matplotlib
 - h5py, cartopy
-- gfortran for legacy packed FA fields
+- gfortran plus external rootpack/ifsaux sources for legacy packed FA fields
 - system ecCodes for GRIB_API-packed FA fields
 
 Legacy `KNGRIB=1/2` packed FA fields are decoded and template-written through
-the vendored rootpack GRIB_MF routines. ALADIN/LAM spectral fields use a
-NumPy bi-Fourier transform that round-trips exactly. Global ARPEGE spectral
-fields use a NumPy Legendre+FFT reference path; for bit-identical agreement
-with EPYGRAM/`ectrans` use the production `ectrans4py` pipeline on Linux.
+the rootpack GRIB_MF routines, but faxarray does not ship model source code.
+Set `FAXARRAY_IFSAUX_ROOT` to a local `ifsaux` source directory, set
+`FAXARRAY_ROOTPACK_TARBALL` to a local rootpack tarball, or set
+`FAXARRAY_GRIB_MF_LIBRARY` to a compatible prebuilt codec library. ALADIN/LAM
+spectral fields use a NumPy bi-Fourier transform that round-trips exactly.
+Global ARPEGE spectral fields use a NumPy Legendre+FFT reference path; for
+bit-identical agreement with EPYGRAM/`ectrans` use the production
+`ectrans4py` pipeline on Linux.
 
 ### What still requires EPYGRAM / ECTRANS
 

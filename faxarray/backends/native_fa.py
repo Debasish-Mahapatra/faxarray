@@ -1,4 +1,4 @@
-"""Native FA access built on the vendored LFI/FA format knowledge."""
+"""Native FA access built on local LFI/FA format knowledge."""
 
 from __future__ import annotations
 

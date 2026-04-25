@@ -53,6 +53,8 @@
   :func:`create_fa_from_scratch`. The function now performs creation
   for the supported geometry families and rejects only unrecognised
   geometry input types.
+- Bundled rootpack/ifsaux model sources. Legacy ``KNGRIB=1/2`` packing now
+  builds only from a user-supplied local source path or prebuilt codec library.
 
 ---
 
