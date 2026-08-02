@@ -570,7 +570,7 @@ FA_METADATA = {
     'VERTIC_DIVER': {'long_name': 'Pseudo Vertic. Divergence', 'units': 's-1'},
     'VERT_VELOCIT': {'long_name': 'Vert velocity w=Dz/Dt (m/s)', 'units': 'm s-1'},
     'VIRT_P_TEMPE': {'long_name': 'Isobaric equivalent tempe', 'units': '1'},
-    'VITESSE_VERT': {'long_name': 'Ver velocity omega=DPi/Dt (Pa/s)', 'units': 'm s-1'},
+    'VITESSE_VERT': {'long_name': 'Ver velocity omega=DPi/Dt (Pa/s)', 'units': 'Pa s-1'},
     'VORTICITY': {'long_name': 'Vorticity', 'units': 's-1'},
     'VertIntegMassDiv': {'long_name': 'Vertically-integr. mass div', 'units': '1'},
     'Volcano Altitude': {'long_name': 'Volcano altitude', 'units': '1'},
