@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `VITESSE_VERT` (vertical pressure velocity, omega = DPi/Dt) declared `units: 'm s-1'`, copied from its sibling `VERT_VELOCIT`. It is now `Pa s-1`. Only the metadata was wrong — the values returned have always been correct Pa/s. Code reading `attrs['units']`, or letting xarray auto-label a plot axis, was off by a factor of rho*g (~8-11).
+- `REFLEC_DBZ`, `REFLECT_DBZ.MAX` and `REFLECT_DBZ_MAX` declared `units: 'mm h-1'` while their `long_name` states dBZ. They are now `dBZ`. `SIM_REFLECTI` and `SURFREFLECT.MAX` are genuinely mm/h and are unchanged.
+
+### Added
+
+- `test/test_metadata_units.py`: pins the units of fields whose `long_name` embeds a unit, and sweeps the whole `FA_METADATA` table for entries whose declared units contradict their own `long_name`.
+
+---
+
 ## [0.2.4] - 2026-02-19
 
 ### Fixed
